@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
-import Editor from '@monaco-editor/react';
+import { useState, useRef, useEffect } from 'react';
+import Editor, { OnMount } from '@monaco-editor/react';
+import type { editor } from 'monaco-editor';
+import { KeyMod, KeyCode } from 'monaco-editor';
 import { Cell as CellType } from '../api';
 
 interface CellProps {
@@ -8,6 +10,10 @@ interface CellProps {
   onUpdateCell: (cellId: string, code: string) => void;
   onDeleteCell: (cellId: string) => void;
 }
+
+// Modern Mac detection (navigator.platform is deprecated)
+// navigator.userAgentData is not yet supported on macOS/iOS, so we use userAgent
+const isMac = navigator.userAgent.includes('Mac OS X');
 
 const statusColors = {
   idle: '#9ca3af',
@@ -27,6 +33,14 @@ const statusIcons = {
 
 export function Cell({ cell, onRunCell, onUpdateCell, onDeleteCell }: CellProps) {
   const [code, setCode] = useState(cell.code);
+  const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
+  const codeRef = useRef(code);
+  const runCellRef = useRef<() => void>();
+
+  // Keep codeRef in sync with code state
+  useEffect(() => {
+    codeRef.current = code;
+  }, [code]);
 
   const handleEditorChange = (value: string | undefined) => {
     if (value !== undefined) {
@@ -34,26 +48,42 @@ export function Cell({ cell, onRunCell, onUpdateCell, onDeleteCell }: CellProps)
     }
   };
 
-  const handleBlur = () => {
-    if (code !== cell.code) {
-      onUpdateCell(cell.id, code);
-    }
-  };
-
   const handleRunClick = () => {
     // Save code first if changed
-    if (code !== cell.code) {
-      onUpdateCell(cell.id, code);
+    if (codeRef.current !== cell.code) {
+      onUpdateCell(cell.id, codeRef.current);
     }
     // Small delay to ensure save completes
     setTimeout(() => onRunCell(cell.id), 100);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-      e.preventDefault();
-      handleRunClick();
-    }
+  // Keep runCellRef in sync so Monaco action uses latest handler
+  useEffect(() => {
+    runCellRef.current = handleRunClick;
+  });
+
+  const handleEditorMount: OnMount = (editor) => {
+    editorRef.current = editor;
+    
+    // Register Cmd/Ctrl+Enter keyboard shortcut directly with Monaco
+    // This ensures it works when the editor has focus
+    editor.addAction({
+      id: 'run-cell',
+      label: 'Run Cell',
+      keybindings: [
+        // KeyMod.CtrlCmd maps to Cmd on Mac, Ctrl on Windows/Linux
+        KeyMod.CtrlCmd | KeyCode.Enter
+      ],
+      run: () => {
+        runCellRef.current?.();
+      }
+    });
+
+    editor.onDidBlurEditorText(() => {
+      if (codeRef.current !== cell.code) {
+        onUpdateCell(cell.id, codeRef.current);
+      }
+    });
   };
 
   return (
@@ -109,7 +139,7 @@ export function Cell({ cell, onRunCell, onUpdateCell, onDeleteCell }: CellProps)
             onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#1d4ed8'}
             onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#2563eb'}
           >
-            Run (Ctrl+Enter)
+            Run ({isMac ? '⌘' : 'Ctrl'}+Enter)
           </button>
           <button
             onClick={() => onDeleteCell(cell.id)}
@@ -131,16 +161,13 @@ export function Cell({ cell, onRunCell, onUpdateCell, onDeleteCell }: CellProps)
       </div>
 
       {/* Code Editor */}
-      <div
-        style={{ border: '1px solid #d1d5db', borderRadius: '4px' }}
-        onKeyDown={handleKeyDown}
-      >
+      <div style={{ border: '1px solid #d1d5db', borderRadius: '4px' }}>
         <Editor
           height="150px"
           language={cell.type === 'python' ? 'python' : 'sql'}
           value={code}
           onChange={handleEditorChange}
-          onBlur={handleBlur}
+          onMount={handleEditorMount}
           options={{
             minimap: { enabled: false },
             lineNumbers: 'on',

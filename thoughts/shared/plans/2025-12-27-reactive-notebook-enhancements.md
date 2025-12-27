@@ -84,9 +84,9 @@ To maintain focused scope and reasonable timeline:
 
 ## Implementation Approach
 
-**Strategy:** Incremental enhancement with backward compatibility
+**Strategy:** Clean break - no existing users to support
 
-1. **Extend, don't replace:** Add `outputs: List[Output]` alongside existing `result` field
+1. **Remove legacy fields:** Delete `result` field entirely, use only `outputs: List[Output]`
 2. **MIME-based dispatch:** Use MIME types for renderer selection, not hardcoded type checks
 3. **Backend-first:** Establish output data flow before frontend rendering
 4. **Quick wins first:** Fix bugs (Phases 4-5) before complex features (Phase 1)
@@ -127,16 +127,28 @@ class MimeType(str, Enum):
 class Output:
     """Single output with MIME type metadata"""
     mime_type: str  # Use MimeType enum values
-    data: Any  # base64 string for images, JSON for structured data, HTML string, etc.
-    metadata: dict = field(default_factory=dict)  # Optional: width, height, etc.
+    data: str | dict | list  # base64 string for images, dict for JSON/tables, HTML string
+    metadata: Dict[str, str | int | float] = field(default_factory=dict)  # Optional: width, height, etc.
 
-# Extend Cell dataclass (insert into existing Cell class)
-outputs: List[Output] = field(default_factory=list)  # NEW: Rich outputs
+# Update Cell dataclass - REMOVE result field, ADD outputs
+@dataclass
+class Cell:
+    id: str
+    type: CellType
+    code: str
+    status: CellStatus = CellStatus.IDLE
+    stdout: str = ""
+    # REMOVED: result field (replaced by outputs)
+    outputs: List[Output] = field(default_factory=list)  # NEW
+    error: Optional[str] = None
+    reads: Set[str] = field(default_factory=set)
+    writes: Set[str] = field(default_factory=set)
 ```
 
 **Line references:**
 - Insert MimeType and Output after [models.py:15](backend/models.py#L15)
-- Add outputs field to Cell at [models.py:26](backend/models.py#L26)
+- **REMOVE** `result` field from Cell at [models.py:23](backend/models.py#L23)
+- **ADD** `outputs` field to Cell at [models.py:26](backend/models.py#L26)
 
 ---
 
@@ -147,9 +159,9 @@ outputs: List[Output] = field(default_factory=list)  # NEW: Rich outputs
 ```python
 import base64
 from io import BytesIO
-from typing import Any, Optional
+from typing import Optional, Union, Dict, List
 
-def to_mime_bundle(obj: Any) -> Optional:
+def to_mime_bundle(obj: object) -> Optional['Output']:
     """Convert Python object to MIME bundle output"""
     from models import Output, MimeType
 
@@ -209,18 +221,25 @@ def to_mime_bundle(obj: Any) -> Optional:
 **Changes**: Add outputs field
 
 ```python
+from typing import List, Optional
+from models import CellStatus, Output
+
 class ExecutionResult:
-    def __init__(self, status, stdout: str = "",
-                 result: Any = None, error: Optional[str] = None,
-                 outputs: List = None):  # NEW parameter
-        self.status = status
-        self.stdout = stdout
-        self.result = result
-        self.error = error
-        self.outputs = outputs or []  # NEW field
+    def __init__(
+        self,
+        status: CellStatus,
+        stdout: str = "",
+        error: Optional[str] = None,
+        outputs: Optional[List[Output]] = None
+    ):
+        self.status: CellStatus = status
+        self.stdout: str = stdout
+        self.error: Optional[str] = error
+        self.outputs: List[Output] = outputs or []
 ```
 
 **Replace:** [executor.py:13-19](backend/executor.py#L13)
+**Note:** Remove `result` parameter and field entirely
 
 ---
 
@@ -229,15 +248,19 @@ class ExecutionResult:
 **Changes**: Modify `execute_python_cell()` to capture expression results
 
 ```python
-async def execute_python_cell(cell, globals_dict: Dict[str, Any],
-                               cell_index: int = 0) -> ExecutionResult:
+from typing import Dict, List
+from models import Cell, CellStatus, Output
+
+async def execute_python_cell(
+    cell: Cell,
+    globals_dict: Dict[str, object],
+    cell_index: int = 0
+) -> ExecutionResult:
     """
     Execute Python code in cell, capturing stdout and last expression value.
     """
-    from models import CellStatus
-
     stdout_capture = StringIO()
-    outputs = []
+    outputs: List[Output] = []
 
     try:
         # Try to parse as expression first
@@ -282,7 +305,6 @@ async def execute_python_cell(cell, globals_dict: Dict[str, Any],
         return ExecutionResult(
             status=CellStatus.SUCCESS,
             stdout=stdout_text,
-            result=None,
             outputs=outputs
         )
 
@@ -314,9 +336,16 @@ async def execute_python_cell(cell, globals_dict: Dict[str, Any],
 **Changes**: Add broadcast method for outputs
 
 ```python
-async def broadcast_cell_output(self, notebook_id: str, cell_id: str, output: dict):
+from typing import Dict, Union
+
+async def broadcast_cell_output(
+    self,
+    notebook_id: str,
+    cell_id: str,
+    output: Dict[str, Union[str, dict, list]]
+) -> None:
     """Broadcast a single output (MIME bundle) for a cell"""
-    message = {
+    message: Dict[str, Union[str, dict]] = {
         "type": "cell_output",
         "cellId": cell_id,
         "output": output
@@ -336,10 +365,15 @@ async def broadcast_cell_output(self, notebook_id: str, cell_id: str, output: di
 # At line 104, add cell_index calculation
 cell_index = notebook.cells.index(cell)
 
-# Clear outputs at line 114
+# Clear outputs at line 113-116
+cell.stdout = ""
 cell.outputs = []
+cell.error = None
 
-# After line 134, add outputs storage
+# After line 131-134, store results
+cell.status = result.status
+cell.stdout = result.stdout
+cell.error = result.error
 cell.outputs = result.outputs
 
 # After line 145, add output broadcasting
@@ -360,20 +394,34 @@ for output in result.outputs:
 **Changes**: Add Output interface and update Cell
 
 ```typescript
+// Table data structure for pandas DataFrames and SQL results
+export interface TableData {
+  type: 'table';
+  columns: string[];
+  rows: (string | number | boolean | null)[][];
+  truncated?: string;
+}
+
+// Output data can be string (base64, HTML) or structured (JSON, table)
+export type OutputData = string | TableData | Record<string, unknown>;
+
 export interface Output {
   mime_type: string;
-  data: any;
-  metadata?: Record<string, any>;
+  data: OutputData;
+  metadata?: Record<string, string | number | boolean>;
 }
+
+export type CellType = 'python' | 'sql';
+export type CellStatus = 'idle' | 'running' | 'success' | 'error' | 'blocked';
 
 export interface Cell {
   id: string;
-  type: 'python' | 'sql';
+  type: CellType;
   code: string;
-  status: 'idle' | 'running' | 'success' | 'error' | 'blocked';
+  status: CellStatus;
   stdout?: string;
-  result?: any;
-  outputs?: Output[];  // NEW
+  // REMOVED: result field
+  outputs?: Output[];  // NEW: Replaces result
   error?: string;
   reads: string[];
   writes: string[];
@@ -389,12 +437,14 @@ export interface Cell {
 **Changes**: Add cell_output message type
 
 ```typescript
+import { Output, CellStatus } from './api';
+
 export type WSMessage =
-  | { type: 'cell_status'; cellId: string; status: string }
+  | { type: 'cell_status'; cellId: string; status: CellStatus }
   | { type: 'cell_stdout'; cellId: string; data: string }
-  | { type: 'cell_result'; cellId: string; result: any }
+  // REMOVED: cell_result (replaced by cell_output)
   | { type: 'cell_error'; cellId: string; error: string }
-  | { type: 'cell_output'; cellId: string; output: { mime_type: string; data: any; metadata?: any } };
+  | { type: 'cell_output'; cellId: string; output: Output };
 ```
 
 **Modify:** [useWebSocket.ts:3-7](frontend/src/useWebSocket.ts#L3)
@@ -417,15 +467,12 @@ const handleWSMessage = useCallback((msg: WSMessage) => {
         case 'cell_status':
           if (msg.status === 'running') {
             // Clear outputs when execution starts
-            return { ...cell, status: 'running', stdout: '', outputs: [], error: null };
+            return { ...cell, status: 'running', stdout: '', outputs: [], error: undefined };
           }
-          return { ...cell, status: msg.status as any };
+          return { ...cell, status: msg.status };
 
         case 'cell_stdout':
           return { ...cell, stdout: msg.data };
-
-        case 'cell_result':
-          return { ...cell, result: msg.result };
 
         case 'cell_error':
           return { ...cell, error: msg.error };
@@ -453,15 +500,30 @@ const handleWSMessage = useCallback((msg: WSMessage) => {
 
 ```typescript
 import React from 'react';
-import { Output } from '../api';
+import { Output, TableData } from '../api';
 
 interface OutputRendererProps {
   output: Output;
 }
 
+// Type guard for TableData
+function isTableData(data: unknown): data is TableData {
+  return (
+    typeof data === 'object' &&
+    data !== null &&
+    'type' in data &&
+    data.type === 'table' &&
+    'columns' in data &&
+    'rows' in data
+  );
+}
+
 export function OutputRenderer({ output }: OutputRendererProps) {
   switch (output.mime_type) {
     case 'image/png':
+      if (typeof output.data !== 'string') {
+        return <div>Error: Expected base64 string for PNG image</div>;
+      }
       return (
         <img
           src={`data:image/png;base64,${output.data}`}
@@ -471,6 +533,9 @@ export function OutputRenderer({ output }: OutputRendererProps) {
       );
 
     case 'text/html':
+      if (typeof output.data !== 'string') {
+        return <div>Error: Expected HTML string</div>;
+      }
       return (
         <div
           dangerouslySetInnerHTML={{ __html: output.data }}
@@ -490,7 +555,7 @@ export function OutputRenderer({ output }: OutputRendererProps) {
       );
 
     case 'application/json':
-      if (output.data.type === 'table') {
+      if (isTableData(output.data)) {
         return (
           <table style={{
             width: '100%',
@@ -499,7 +564,7 @@ export function OutputRenderer({ output }: OutputRendererProps) {
           }}>
             <thead>
               <tr style={{ backgroundColor: '#e5e7eb' }}>
-                {output.data.columns.map((col: string) => (
+                {output.data.columns.map((col) => (
                   <th key={col} style={{
                     border: '1px solid #d1d5db',
                     padding: '4px 8px',
@@ -509,13 +574,13 @@ export function OutputRenderer({ output }: OutputRendererProps) {
               </tr>
             </thead>
             <tbody>
-              {output.data.rows.map((row: any[], idx: number) => (
+              {output.data.rows.map((row, idx) => (
                 <tr key={idx}>
                   {row.map((val, i) => (
                     <td key={i} style={{
                       border: '1px solid #d1d5db',
                       padding: '4px 8px'
-                    }}>{String(val)}</td>
+                    }}>{val === null ? 'null' : String(val)}</td>
                   ))}
                 </tr>
               ))}
@@ -526,6 +591,9 @@ export function OutputRenderer({ output }: OutputRendererProps) {
       return <pre>{JSON.stringify(output.data, null, 2)}</pre>;
 
     case 'text/plain':
+      if (typeof output.data !== 'string') {
+        return <div>Error: Expected string for plain text</div>;
+      }
       return (
         <pre style={{
           backgroundColor: '#f3f4f6',
@@ -587,7 +655,34 @@ import { OutputRenderer } from './OutputRenderer';
       </div>
     ))}
 
-    {/* Keep existing result/error rendering */}
+    {/* Error */}
+    {cell.error && (
+      <pre style={{
+        backgroundColor: '#fef2f2',
+        color: '#991b1b',
+        padding: '8px',
+        borderRadius: '4px',
+        fontSize: '13px',
+        overflow: 'auto',
+        marginTop: '8px'
+      }}>
+        {cell.error}
+      </pre>
+    )}
+
+    {/* Blocked status */}
+    {cell.status === 'blocked' && !cell.error && (
+      <div style={{
+        backgroundColor: '#fffbeb',
+        color: '#92400e',
+        padding: '8px',
+        borderRadius: '4px',
+        fontSize: '13px',
+        marginTop: '8px'
+      }}>
+        ⚠️ Upstream dependency failed.
+      </div>
+    )}
   </div>
 )}
 ```
@@ -656,13 +751,21 @@ Add to dependencies:
 ```typescript
 import embed from 'vega-embed';
 import { useEffect, useRef } from 'react';
+import type { VisualizationSpec } from 'vega-embed';
 
 // Replace vegalite case with:
 case 'application/vnd.vegalite.v5+json':
-  return <VegaLiteRenderer spec={output.data} />;
+  if (typeof output.data === 'object' && output.data !== null) {
+    return <VegaLiteRenderer spec={output.data as VisualizationSpec} />;
+  }
+  return <div>Error: Expected Vega-Lite spec object</div>;
 
 // Add at end:
-function VegaLiteRenderer({ spec }: { spec: any }) {
+interface VegaLiteRendererProps {
+  spec: VisualizationSpec;
+}
+
+function VegaLiteRenderer({ spec }: VegaLiteRendererProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -670,6 +773,8 @@ function VegaLiteRenderer({ spec }: { spec: any }) {
       embed(containerRef.current, spec, {
         actions: false,
         renderer: 'svg'
+      }).catch(err => {
+        console.error('Vega-Lite rendering error:', err);
       });
     }
   }, [spec]);
@@ -804,10 +909,14 @@ def create_demo_notebook() -> Notebook:
             id=str(uuid.uuid4()),
             type=CellType.PYTHON,
             code="""import matplotlib.pyplot as plt
+
+# Matplotlib chart - rendered as PNG
 plt.figure(figsize=(8, 5))
-plt.plot([1, 2, 3], [x, y, 15], marker='o')
-plt.title(f"Dependency Demo (x={x}, y={y})")
-plt.grid(True)
+plt.plot([1, 2, 3], [x, y, 15], marker='o', linewidth=2)
+plt.title(f"Matplotlib: Dependency Demo (x={x}, y={y})")
+plt.xlabel("Step")
+plt.ylabel("Value")
+plt.grid(True, alpha=0.3)
 plt.gcf()""",
             status=CellStatus.IDLE,
             reads={'x', 'y', 'plt'},
@@ -817,14 +926,61 @@ plt.gcf()""",
             id=str(uuid.uuid4()),
             type=CellType.PYTHON,
             code="""import pandas as pd
+
+# Create DataFrame
 df = pd.DataFrame({
-    "category": ["A", "B", "C"],
-    "value": [x, y, x+y]
+    "category": ["A", "B", "C", "D"],
+    "value": [x, y, x+y, x*2],
+    "label": ["X", "Y", "Sum", "Double"]
 })
 df""",
             status=CellStatus.IDLE,
             reads={'x', 'y', 'pd'},
             writes={'df', 'pd'}
+        ),
+        Cell(
+            id=str(uuid.uuid4()),
+            type=CellType.PYTHON,
+            code="""import plotly.express as px
+
+# Plotly interactive chart - rendered as HTML
+fig = px.bar(
+    df,
+    x="category",
+    y="value",
+    title=f"Plotly: Interactive Bar Chart (x={x})",
+    labels={"value": "Amount", "category": "Category"},
+    text="label",
+    color="value",
+    color_continuous_scale="viridis"
+)
+fig.update_traces(textposition='outside')
+fig.update_layout(height=400)
+fig""",
+            status=CellStatus.IDLE,
+            reads={'df', 'x', 'px'},
+            writes={'fig', 'px'}
+        ),
+        Cell(
+            id=str(uuid.uuid4()),
+            type=CellType.PYTHON,
+            code="""import altair as alt
+
+# Altair chart - rendered as Vega-Lite JSON
+chart = alt.Chart(df).mark_bar().encode(
+    x=alt.X('category:N', title='Category'),
+    y=alt.Y('value:Q', title='Value'),
+    color=alt.Color('value:Q', scale=alt.Scale(scheme='viridis')),
+    tooltip=['category', 'value', 'label']
+).properties(
+    title='Altair: Declarative Visualization',
+    width=400,
+    height=300
+)
+chart""",
+            status=CellStatus.IDLE,
+            reads={'df', 'alt'},
+            writes={'chart', 'alt'}
         )
     ]
 
@@ -893,7 +1049,8 @@ async def startup_event():
 
 #### Manual Verification:
 - [ ] Create notebook, restart, verify persists
-- [ ] Demo notebook loads with examples
+- [ ] Demo notebook loads with 6 cells: x, y, matplotlib, pandas, plotly, altair
+- [ ] All charts in demo render correctly (PNG, table, HTML, Vega-Lite)
 - [ ] Edits to demo persist across restarts
 
 ---
