@@ -2,7 +2,7 @@
   "id": "demo",
   "name": null,
   "db_conn_string": null,
-  "revision": 1,
+  "revision": 3,
   "cells": [
     {
       "id": "c1341f53-02f8-469c-84d9-0f1cf9321843",
@@ -29,9 +29,9 @@
       "type": "python",
       "code": "import matplotlib.pyplot as plt\n\n# Matplotlib chart - rendered as PNG\nplt.figure(figsize=(8, 5))\nplt.plot([1, 2, 3], [x, y, 15], marker='o', linewidth=2)\nplt.title(f\"Matplotlib: Dependency Demo (x={x}, y={y})\")\nplt.xlabel(\"Step\")\nplt.ylabel(\"Value\")\nplt.grid(True, alpha=0.3)\nplt.gcf()",
       "reads": [
+        "y",
         "plt",
-        "x",
-        "y"
+        "x"
       ],
       "writes": [
         "plt"
@@ -40,15 +40,15 @@
     {
       "id": "36dfe139-d33f-4c4f-b755-6563633ff30d",
       "type": "python",
-      "code": "import pandas as pd\n\n# Create DataFrame\ndf = pd.DataFrame({\n    \"category\": [\"A\", \"B\", \"C\", \"D\"],\n    \"value\": [x, y, x+y, x*2],\n    \"label\": [\"X\", \"Y\", \"Sum\", \"Double\"]\n})\ndf",
+      "code": "import pandas as pd\n\n# Create DataFrame\ndf = pd.DataFrame({\n    \"category\": [\"A\", \"B\", \"C\", \"D\"],\n    \"value\": [x, y, x+y, x*3],\n    \"label\": [\"X\", \"Y\", \"Sum\", \"Double\"]\n})\ndf",
       "reads": [
         "pd",
-        "x",
-        "y"
+        "y",
+        "x"
       ],
       "writes": [
-        "pd",
-        "df"
+        "df",
+        "pd"
       ]
     },
     {
@@ -56,26 +56,28 @@
       "type": "python",
       "code": "import plotly.express as px\n\n# Plotly interactive chart - rendered as HTML\nfig = px.bar(\n    df,\n    x=\"category\",\n    y=\"value\",\n    title=f\"Plotly: Interactive Bar Chart (x={x})\",\n    labels={\"value\": \"Amount\", \"category\": \"Category\"},\n    text=\"label\",\n    color=\"value\",\n    color_continuous_scale=\"viridis\"\n)\nfig.update_traces(textposition='outside')\nfig.update_layout(height=400)\nfig",
       "reads": [
-        "x",
         "df",
-        "px"
+        "px",
+        "x"
       ],
       "writes": [
-        "px",
-        "fig"
+        "fig",
+        "px"
       ]
     },
     {
       "id": "2624acc5-a23b-47a4-9540-a0e531bd5fd3",
       "type": "python",
-      "code": "import altair as alt\n\n# Altair chart - rendered as Vega-Lite JSON\nchart = alt.Chart(df).mark_bar().encode(\n    x=alt.X('category:N', title='Category'),\n    y=alt.Y('value:Q', title='Value'),\n    color=alt.Color('value:Q', scale=alt.Scale(scheme='viridis')),\n    tooltip=['category', 'value', 'label']\n).properties(\n    title='Altair: Declarative Visualization',\n    width=400,\n    height=300\n)\nchart",
+      "code": "import altair as alt\nimport time \n\ntime.sleep(5)\n# Altair chart - rendered as Vega-Lite JSON\nchart = alt.Chart(df).mark_bar().encode(\n    x=alt.X('category:N', title='Category'),\n    y=alt.Y('value:Q', title='Value'),\n    color=alt.Color('value:Q', scale=alt.Scale(scheme='viridis')),\n    tooltip=['category', 'value', 'label']\n).properties(\n    title='Altair: Declarative Visualization',\n    width=400,\n    height=300\n)\nchart",
       "reads": [
         "df",
-        "alt"
+        "alt",
+        "time"
       ],
       "writes": [
+        "chart",
         "alt",
-        "chart"
+        "time"
       ]
     }
   ]

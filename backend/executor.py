@@ -82,6 +82,11 @@ async def execute_python_cell(
 ) -> ExecutionResult:
     """
     Execute Python code in cell, capturing stdout and last expression value.
+    
+    Note: This runs synchronously in the main thread because libraries like matplotlib
+    use thread-local storage and GUI backends that don't work in thread pools.
+    The caller should use `await asyncio.sleep(0)` before calling to yield to the
+    event loop and flush pending WebSocket messages.
     """
     from models import CellStatus
     import ast

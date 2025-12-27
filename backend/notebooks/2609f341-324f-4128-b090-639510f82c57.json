@@ -1,0 +1,30 @@
+{
+  "id": "2609f341-324f-4128-b090-639510f82c57",
+  "name": "status issue",
+  "db_conn_string": null,
+  "revision": 15,
+  "cells": [
+    {
+      "id": "7fda2f29-7a80-48a2-bbf5-edfe50fa1da7",
+      "type": "python",
+      "code": "import time\n\nprint('x')\ntime.sleep(2)\nprint('y1')",
+      "reads": [
+        "print",
+        "time"
+      ],
+      "writes": [
+        "time"
+      ]
+    },
+    {
+      "id": "81474db0-3feb-45e5-9fcb-9a55b6c583e5",
+      "type": "python",
+      "code": "print('123')\ntime.sleep(2)\nprint('125')\n",
+      "reads": [
+        "print",
+        "time"
+      ],
+      "writes": []
+    }
+  ]
+}

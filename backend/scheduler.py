@@ -112,6 +112,12 @@ class ExecutionScheduler:
         # Mark as running
         cell.status = CellStatus.RUNNING
         await broadcaster.broadcast_cell_status(notebook_id, cell.id, CellStatus.RUNNING)
+        
+        # Yield to event loop to flush WebSocket message before synchronous execution.
+        # This is a standard Python async pattern - libraries like matplotlib use 
+        # thread-local storage and don't work in thread pools, so we must run
+        # execution in the main thread but yield first to send the RUNNING status.
+        await asyncio.sleep(0)
 
         # Clear previous outputs
         cell.stdout = ""
