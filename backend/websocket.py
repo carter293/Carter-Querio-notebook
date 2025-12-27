@@ -93,6 +93,7 @@ class WebSocketBroadcaster:
         """Broadcast cell creation"""
         await self.broadcast(notebook_id, {
             "type": "cell_created",
+            "cellId": cell_data["id"],  # Include cellId for consistency with other messages
             "cell": cell_data
         })
 

@@ -228,46 +228,75 @@ When running a cell in the demo notebook, all dependent cell results appear "all
 - Each WebSocket message triggers `setNotebook(prev => ...)` with functional update
 - React batches state updates that happen synchronously (same event loop tick)
 
-### Possible Causes
+### Logging Results (2025-12-27)
 
-1. **React State Batching**: If multiple WebSocket messages arrive in quick succession (within the same event loop tick), React will batch all `setNotebook` calls into a single render, causing all updates to appear simultaneously.
+**Backend Logs Analysis:**
+- ✅ **Sequential execution confirmed**: Cells execute sequentially with timing: 0.000s, 0.004s, 0.005s, 0.520s, 1.028s, 1.194s
+- ✅ **Dependency check working correctly**: All dependencies are in execution set (`dependencies_outside_execution_set=[]` in all cases)
+- ✅ **No incorrect blocking**: No cells were incorrectly marked as BLOCKED
+- ✅ **Status broadcasts sequential**: Each status update is broadcast individually with `await`
 
-2. **Fast Execution**: If cells execute very quickly (simple variable assignments), they might complete before the browser can render intermediate states. However, the demo notebook includes matplotlib/plotly/altair charts which should take time to render.
+**Frontend Logs Analysis:**
+- ✅ **WebSocket messages arrive quickly**: All messages arrive within ~0.5ms window (4038-4041ms timestamps)
+- ✅ **React batching confirmed**: Only ONE `[REACT_RENDER]` occurs at the end showing all cells as `success`
+- ✅ **State updates processed**: All `[STATUS_UPDATE]` logs show messages being processed, but React batches them
+- ✅ **Single render**: React renders once at 4052ms with all cells already in `success` state
 
-3. **Dependency Check Bug Interaction**: If the dependency check bug causes cells to be incorrectly skipped initially, and then all execute at once when the condition is bypassed, this could cause the "all at once" behavior.
+### Root Cause Confirmed
 
-4. **WebSocket Message Timing**: If WebSocket messages are arriving faster than React can process them, they might queue up and all be processed in one batch.
+**React State Update Batching** is the root cause. Evidence:
+1. Backend executes sequentially (confirmed by timing logs)
+2. WebSocket messages arrive in quick succession (~0.5ms apart)
+3. React batches all `setNotebook` calls that occur synchronously
+4. Only one render occurs, showing all cells as `success` simultaneously
 
-### Most Likely Cause
-
-**React State Update Batching** combined with **fast WebSocket message delivery**. When cells execute quickly:
-- Backend sends WebSocket messages sequentially (with `await`)
-- But messages arrive at the frontend in quick succession
-- React batches all `setNotebook` calls into a single render
-- All cell updates appear simultaneously in the UI
-
-### Verification Needed
-
-To confirm, check:
-1. Browser DevTools Network tab → WebSocket messages: Are they arriving sequentially or all at once?
-2. React DevTools Profiler: Are state updates being batched?
-3. Console logs: Add timing logs to `handleWSMessage` to see message arrival timing
+**The dependency check bug is NOT causing this issue** - all dependencies are correctly identified as being in the execution set.
 
 ### Potential Solutions
 
-1. **Add artificial delays**: Add small delays between cell executions to ensure sequential rendering (not recommended for production)
+1. **Use `flushSync`**: Force React to flush updates immediately instead of batching (may impact performance)
+   ```typescript
+   import { flushSync } from 'react-dom';
+   flushSync(() => {
+     setNotebook(prev => ...);
+   });
+   ```
 
-2. **Use `flushSync`**: Force React to flush updates immediately instead of batching (may impact performance)
+2. **Add artificial delays**: Add small delays between cell executions to ensure sequential rendering (not recommended for production)
 
 3. **Debounce/throttle updates**: Batch updates with a small delay to ensure sequential rendering
 
-4. **Fix dependency check bug first**: The dependency check bug might be causing cells to execute out of order, which could contribute to this issue
+4. **Use `startTransition`**: Wrap updates in `startTransition` to allow React to prioritize rendering (may not solve batching issue)
+
+## Logging Verification Results (2025-12-27)
+
+### Dependency Check Bug Status
+
+**NOT CONFIRMED** - Logs show:
+- All dependencies are correctly identified as being in the execution set
+- `dependencies_outside_execution_set=[]` for all cells checked
+- No cells were incorrectly marked as BLOCKED
+- All cells executed successfully in the correct order
+
+**Conclusion**: The dependency check bug described in this research document does not appear to be occurring in the current execution. However, the bug could still occur in edge cases (e.g., when a dependency fails in a previous run and is not in the current execution set).
+
+### Sequential Execution vs. "All at Once" - CONFIRMED
+
+**Root Cause**: React State Update Batching
+
+**Evidence**:
+- Backend executes sequentially (timing: 0.000s → 1.194s)
+- WebSocket messages arrive within ~0.5ms window
+- React batches all state updates into a single render
+- Only one `[REACT_RENDER]` occurs showing all cells as `success`
+
+**Solution**: Use `flushSync` to force immediate renders, or add small delays between broadcasts.
 
 ## Open Questions
 
-1. Should the dependency check also verify that dependencies have finished executing (not RUNNING)?
-2. Are there edge cases where a dependency could be RUNNING when checking (despite topological sort)?
-3. Should we add logging to track when cells are incorrectly marked as BLOCKED?
-4. **Is the "all at once" issue caused by React batching, or is it related to the dependency check bug?**
-5. **Should we add timing delays between cell executions to ensure sequential UI updates?**
+1. ✅ **RESOLVED**: Is the "all at once" issue caused by React batching? **YES** - Confirmed via logging
+2. ✅ **RESOLVED**: Is the dependency check bug causing incorrect blocking? **NO** - Not observed in logs
+3. Should the dependency check also verify that dependencies have finished executing (not RUNNING)?
+4. Are there edge cases where a dependency could be RUNNING when checking (despite topological sort)?
+5. Should we implement `flushSync` to fix the "all at once" appearance, or is this acceptable UX?
 

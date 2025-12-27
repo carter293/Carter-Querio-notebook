@@ -16,26 +16,17 @@ import type {
   CellStatus,
   CellResponse,
   NotebookResponse,
-  NotebookMetadataResponse,
-  OutputResponse,
   ListNotebooksResponse,
-  CreateCellResponse,
-  CreateNotebookResponse,
+  NotebookMetadataResponse,
 } from './client';
 
 // Re-export with convenient aliases
 export type { CellType, CellStatus };
 export type Cell = CellResponse;
 export type Notebook = NotebookResponse;
-export type NotebookMetadata = NotebookMetadataResponse;
-export type Output = OutputResponse;
-export type { ListNotebooksResponse, CreateCellResponse, CreateNotebookResponse };
 
 // Re-export TableData from generated client (now properly typed in OpenAPI spec)
 export type { TableData } from './client';
-
-// Extract the data type from the generated OutputResponse (includes TableData)
-export type OutputData = OutputResponse['data'];
 
 // Helper to handle errors consistently
 function handleApiError(response: Response, operation: string): never {
@@ -73,7 +64,7 @@ export async function getNotebook(id: string): Promise<Notebook> {
   return result.data as Notebook;
 }
 
-export async function listNotebooks(): Promise<NotebookMetadata[]> {
+export async function listNotebooks(): Promise<NotebookMetadataResponse[]> {
   const result = await listNotebooksEndpointApiNotebooksGet();
   
   if (result.error) {

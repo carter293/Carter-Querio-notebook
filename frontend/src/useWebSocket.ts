@@ -1,14 +1,60 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
-import { Output, CellStatus, Cell } from './api-client';
+import type { CellResponse, OutputResponse, CellStatus } from './client/types.gen';
 
+// WebSocket message types - these match the backend WebSocket broadcaster in backend/websocket.py
+// Note: WebSocket messages are not part of the OpenAPI spec, so these are manually maintained
+// but should match the backend implementation exactly
+// 
+// Using a discriminated union pattern for type safety and narrowing
 export type WSMessage =
   | { type: 'cell_updated'; cellId: string; cell: { code: string; reads: string[]; writes: string[]; status: string } }
-  | { type: 'cell_created'; cell: Cell }
+  | { type: 'cell_created'; cellId: string; cell: CellResponse }
   | { type: 'cell_deleted'; cellId: string }
   | { type: 'cell_status'; cellId: string; status: CellStatus }
   | { type: 'cell_stdout'; cellId: string; data: string }
   | { type: 'cell_error'; cellId: string; error: string }
-  | { type: 'cell_output'; cellId: string; output: Output };
+  | { type: 'cell_output'; cellId: string; output: OutputResponse };
+
+// Type guard helpers for better type narrowing
+export function isWSMessage(msg: unknown): msg is WSMessage {
+  return (
+    typeof msg === 'object' &&
+    msg !== null &&
+    'type' in msg &&
+    'cellId' in msg &&
+    typeof (msg as { type: unknown; cellId: unknown }).type === 'string' &&
+    typeof (msg as { cellId: unknown }).cellId === 'string'
+  );
+}
+
+// Specific type guards for each message type
+export function isCellUpdated(msg: WSMessage): msg is Extract<WSMessage, { type: 'cell_updated' }> {
+  return msg.type === 'cell_updated';
+}
+
+export function isCellCreated(msg: WSMessage): msg is Extract<WSMessage, { type: 'cell_created' }> {
+  return msg.type === 'cell_created';
+}
+
+export function isCellDeleted(msg: WSMessage): msg is Extract<WSMessage, { type: 'cell_deleted' }> {
+  return msg.type === 'cell_deleted';
+}
+
+export function isCellStatus(msg: WSMessage): msg is Extract<WSMessage, { type: 'cell_status' }> {
+  return msg.type === 'cell_status';
+}
+
+export function isCellStdout(msg: WSMessage): msg is Extract<WSMessage, { type: 'cell_stdout' }> {
+  return msg.type === 'cell_stdout';
+}
+
+export function isCellError(msg: WSMessage): msg is Extract<WSMessage, { type: 'cell_error' }> {
+  return msg.type === 'cell_error';
+}
+
+export function isCellOutput(msg: WSMessage): msg is Extract<WSMessage, { type: 'cell_output' }> {
+  return msg.type === 'cell_output';
+}
 
 export function useWebSocket(
   notebookId: string,
@@ -37,8 +83,19 @@ export function useWebSocket(
     };
 
     websocket.onmessage = (event) => {
-      const message = JSON.parse(event.data);
-      onMessage(message);
+      try {
+        const parsed = JSON.parse(event.data);
+        
+        // Runtime validation - ensure message structure is valid
+        if (!isWSMessage(parsed)) {
+          console.error('Invalid WebSocket message structure:', parsed);
+          return;
+        }
+        
+        onMessage(parsed);
+      } catch (error) {
+        console.error('Failed to parse WebSocket message:', error, event.data);
+      }
     };
 
     websocket.onerror = (error) => {
