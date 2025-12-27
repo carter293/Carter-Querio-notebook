@@ -1,0 +1,951 @@
+# Reactive Notebook Enhancements Implementation Plan
+
+## Overview
+
+Enhance the reactive notebook with professional chart rendering capabilities (matplotlib, plotly, altair), persistent storage, and critical bug fixes. This implementation follows marimo's proven MIME bundle architecture for output transport, enabling rich data visualizations while maintaining the reactive dependency execution model.
+
+## Current State Analysis
+
+The reactive notebook currently implements:
+- **Core reactive execution:** Cells automatically re-execute when dependencies change ([scheduler.py:44-102](backend/scheduler.py#L44))
+- **Dependency tracking:** AST-based analysis extracts variable reads/writes ([ast_parser.py:44-71](backend/ast_parser.py#L44))
+- **SQL integration:** Cells can query PostgreSQL with Python variable substitution ([executor.py:66-135](backend/executor.py#L66))
+- **WebSocket updates:** Real-time cell status and output streaming ([websocket.py:42-68](backend/websocket.py#L42))
+
+### Key Limitations Discovered:
+
+1. **No Chart Support:**
+   - [executor.py:43](backend/executor.py#L43) - Comment shows `result` field unused for Python cells
+   - Only text stdout and SQL tables are captured
+   - No MIME type system for rich outputs
+
+2. **No Persistence:**
+   - [routes.py:12](backend/routes.py#L12) - `NOTEBOOKS: Dict[str, Notebook] = {}` is pure in-memory storage
+   - All notebook state lost on server restart
+   - No demo/template notebooks for new users
+
+3. **Double-Run Output Bug:**
+   - [Notebook.tsx:36](frontend/src/components/Notebook.tsx#L36) - Stdout appends instead of replaces: `stdout: (cell.stdout || '') + msg.data`
+   - [scheduler.py:113-116](backend/scheduler.py#L113) - Outputs cleared server-side but not broadcasted to frontend
+   - Running cell twice shows duplicate output
+
+4. **Poor Error Messages:**
+   - [executor.py:32](backend/executor.py#L32) - Tracebacks show `<cell-{cell.id}>` with UUIDs
+   - User-facing errors leak implementation details
+
+## System Context Analysis
+
+This plan addresses **both symptoms and root causes**:
+
+**Root Cause:** The output system was designed for simple text/table results. The `ExecutionResult` class ([executor.py:13-19](backend/executor.py#L13)) has a single untyped `result` field with no MIME type metadata. This architectural limitation prevents rich outputs like charts.
+
+**Systemic Solution:** We're introducing a proper MIME bundle system modeled after marimo's architecture, which separates output transport (MIME types + data) from rendering (frontend renderers per type). This enables extensibility for future output types (images, videos, widgets) without core architecture changes.
+
+**Symptom Fixes:** The double-run bug and traceback issues are genuine bugs with targeted fixes, not architectural problems.
+
+## Desired End State
+
+After implementation, the notebook will:
+
+1. **Render Charts Professionally:**
+   - Matplotlib charts as PNG images with proper sizing
+   - Plotly interactive charts with zoom/pan controls
+   - Altair/Vega-Lite charts with declarative specifications
+   - Pandas DataFrames as formatted tables
+
+2. **Persist Reliably:**
+   - Auto-save notebooks to JSON files on every change
+   - Load notebooks on server startup
+   - Provide demo notebook with examples on first run
+
+3. **Behave Correctly:**
+   - No duplicate outputs on re-run
+   - Clear error messages with cell positions (Cell[0], Cell[1])
+   - Proper output clearing between executions
+
+### Verification:
+- Manual testing with all chart libraries
+- Server restart preserves notebook state
+- Demo notebook loads with working examples
+
+## What We're NOT Doing
+
+To maintain focused scope and reasonable timeline:
+
+1. **Expression-only outputs** (e.g., typing `123`) - Would require complex AST manipulation; limited value
+2. **Interactive chart selections** - marimo's reactive chart features (click selections feeding back to Python)
+3. **Full IPython display protocol** - Complete compatibility with `IPython.display.display()`, display IDs, update mechanisms
+4. **Multiple outputs per cell** - Support for multiple `display()` calls creating separate output areas
+5. **Kernel state persistence** - Saving Python object state to disk (will re-execute on load instead)
+6. **Output streaming** - Progressive output updates for long-running cells
+7. **Chart size limits** - Automatic compression/resizing of large charts
+8. **ANSI color codes** - Terminal color support in stdout
+9. **Binary file outputs** - PDFs, Excel files, etc.
+
+## Implementation Approach
+
+**Strategy:** Incremental enhancement with backward compatibility
+
+1. **Extend, don't replace:** Add `outputs: List[Output]` alongside existing `result` field
+2. **MIME-based dispatch:** Use MIME types for renderer selection, not hardcoded type checks
+3. **Backend-first:** Establish output data flow before frontend rendering
+4. **Quick wins first:** Fix bugs (Phases 4-5) before complex features (Phase 1)
+5. **Manual testing:** Chart rendering requires visual verification; automated tests optional
+
+**Dependencies:**
+- Phase 2 must complete before Phase 1 testing (need packages installed)
+- Phase 3 depends on stable output model from Phase 1
+- Phases 4-5 are independent and can run in parallel
+
+---
+
+## Phase 1: MIME Bundle Output System
+
+### Overview
+Implement a MIME bundle architecture to transport rich outputs (charts, images, formatted data) from Python execution to frontend rendering. Based on marimo's proven pattern of separating output types via MIME metadata.
+
+### Changes Required:
+
+#### 1.1 Output Data Model
+**File**: `backend/models.py`
+**Changes**: Add new dataclass and extend Cell model
+
+```python
+from typing import List, Optional, Any
+from dataclasses import dataclass, field
+from enum import Enum
+
+class MimeType(str, Enum):
+    """Known MIME types for output rendering"""
+    PNG = "image/png"
+    HTML = "text/html"
+    PLAIN = "text/plain"
+    VEGA_LITE = "application/vnd.vegalite.v5+json"
+    JSON = "application/json"
+
+@dataclass
+class Output:
+    """Single output with MIME type metadata"""
+    mime_type: str  # Use MimeType enum values
+    data: Any  # base64 string for images, JSON for structured data, HTML string, etc.
+    metadata: dict = field(default_factory=dict)  # Optional: width, height, etc.
+
+# Extend Cell dataclass (insert into existing Cell class)
+outputs: List[Output] = field(default_factory=list)  # NEW: Rich outputs
+```
+
+**Line references:**
+- Insert MimeType and Output after [models.py:15](backend/models.py#L15)
+- Add outputs field to Cell at [models.py:26](backend/models.py#L26)
+
+---
+
+#### 1.2 MIME Bundle Conversion
+**File**: `backend/executor.py`
+**Changes**: Add conversion functions for chart libraries
+
+```python
+import base64
+from io import BytesIO
+from typing import Any, Optional
+
+def to_mime_bundle(obj: Any) -> Optional:
+    """Convert Python object to MIME bundle output"""
+    from models import Output, MimeType
+
+    # Matplotlib figure
+    try:
+        import matplotlib.pyplot as plt
+        if isinstance(obj, plt.Figure):
+            buf = BytesIO()
+            obj.savefig(buf, format='png', bbox_inches='tight', dpi=100)
+            buf.seek(0)
+            img_base64 = base64.b64encode(buf.read()).decode('utf-8')
+            return Output(mime_type=MimeType.PNG, data=img_base64)
+    except ImportError:
+        pass
+
+    # Plotly figure
+    try:
+        import plotly.graph_objects as go
+        if isinstance(obj, go.Figure):
+            html = obj.to_html(include_plotlyjs='cdn', div_id=None)
+            return Output(mime_type=MimeType.HTML, data=html)
+    except ImportError:
+        pass
+
+    # Altair chart
+    try:
+        import altair as alt
+        if isinstance(obj, alt.Chart):
+            vega_json = obj.to_dict()
+            return Output(mime_type=MimeType.VEGA_LITE, data=vega_json)
+    except ImportError:
+        pass
+
+    # Pandas DataFrame
+    try:
+        import pandas as pd
+        if isinstance(obj, pd.DataFrame):
+            table_data = {
+                "type": "table",
+                "columns": obj.columns.tolist(),
+                "rows": obj.values.tolist()
+            }
+            return Output(mime_type=MimeType.JSON, data=table_data)
+    except ImportError:
+        pass
+
+    # Fallback: convert to string
+    return Output(mime_type=MimeType.PLAIN, data=str(obj))
+```
+
+**Insert location:** After imports at [executor.py:11](backend/executor.py#L11)
+
+---
+
+#### 1.3 Update ExecutionResult
+**File**: `backend/executor.py`
+**Changes**: Add outputs field
+
+```python
+class ExecutionResult:
+    def __init__(self, status, stdout: str = "",
+                 result: Any = None, error: Optional[str] = None,
+                 outputs: List = None):  # NEW parameter
+        self.status = status
+        self.stdout = stdout
+        self.result = result
+        self.error = error
+        self.outputs = outputs or []  # NEW field
+```
+
+**Replace:** [executor.py:13-19](backend/executor.py#L13)
+
+---
+
+#### 1.4 Capture Last Expression Value
+**File**: `backend/executor.py`
+**Changes**: Modify `execute_python_cell()` to capture expression results
+
+```python
+async def execute_python_cell(cell, globals_dict: Dict[str, Any],
+                               cell_index: int = 0) -> ExecutionResult:
+    """
+    Execute Python code in cell, capturing stdout and last expression value.
+    """
+    from models import CellStatus
+
+    stdout_capture = StringIO()
+    outputs = []
+
+    try:
+        # Try to parse as expression first
+        try:
+            compiled = compile(cell.code, f"Cell[{cell_index}]", "eval")
+            with redirect_stdout(stdout_capture):
+                result_value = eval(compiled, globals_dict)
+
+            # Convert result to MIME bundle
+            if result_value is not None:
+                output = to_mime_bundle(result_value)
+                if output:
+                    outputs.append(output)
+
+        except SyntaxError:
+            # Not a simple expression, compile as statements
+            import ast
+            tree = ast.parse(cell.code)
+
+            if tree.body and isinstance(tree.body[-1], ast.Expr):
+                # Last statement is an expression
+                exec_code = compile(ast.Module(body=tree.body[:-1], type_ignores=[]),
+                                   f"Cell[{cell_index}]", "exec")
+                eval_code = compile(ast.Expression(body=tree.body[-1].value),
+                                   f"Cell[{cell_index}]", "eval")
+
+                with redirect_stdout(stdout_capture):
+                    exec(exec_code, globals_dict)
+                    result_value = eval(eval_code, globals_dict)
+
+                if result_value is not None:
+                    output = to_mime_bundle(result_value)
+                    if output:
+                        outputs.append(output)
+            else:
+                # No trailing expression
+                compiled = compile(cell.code, f"Cell[{cell_index}]", "exec")
+                with redirect_stdout(stdout_capture):
+                    exec(compiled, globals_dict)
+
+        stdout_text = stdout_capture.getvalue()
+        return ExecutionResult(
+            status=CellStatus.SUCCESS,
+            stdout=stdout_text,
+            result=None,
+            outputs=outputs
+        )
+
+    except SyntaxError as e:
+        error_msg = f"SyntaxError on line {e.lineno}: {e.msg}"
+        if e.text:
+            error_msg += f"\n{e.text.rstrip()}"
+            if e.offset:
+                error_msg += f"\n{' ' * (e.offset - 1)}^"
+        return ExecutionResult(
+            status=CellStatus.ERROR,
+            error=error_msg
+        )
+
+    except Exception as e:
+        error_msg = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
+        return ExecutionResult(
+            status=CellStatus.ERROR,
+            error=error_msg
+        )
+```
+
+**Replace:** [executor.py:21-64](backend/executor.py#L21)
+
+---
+
+#### 1.5 WebSocket Broadcasting
+**File**: `backend/websocket.py`
+**Changes**: Add broadcast method for outputs
+
+```python
+async def broadcast_cell_output(self, notebook_id: str, cell_id: str, output: dict):
+    """Broadcast a single output (MIME bundle) for a cell"""
+    message = {
+        "type": "cell_output",
+        "cellId": cell_id,
+        "output": output
+    }
+    await self.broadcast(notebook_id, message)
+```
+
+**Insert after:** [websocket.py:68](backend/websocket.py#L68)
+
+---
+
+#### 1.6 Scheduler Output Broadcasting
+**File**: `backend/scheduler.py`
+**Changes**: Broadcast outputs after execution
+
+```python
+# At line 104, add cell_index calculation
+cell_index = notebook.cells.index(cell)
+
+# Clear outputs at line 114
+cell.outputs = []
+
+# After line 134, add outputs storage
+cell.outputs = result.outputs
+
+# After line 145, add output broadcasting
+for output in result.outputs:
+    await broadcaster.broadcast_cell_output(notebook_id, cell.id, {
+        "mime_type": output.mime_type,
+        "data": output.data,
+        "metadata": output.metadata
+    })
+```
+
+**Modify locations:** Lines 104, 114, 134, after 145
+
+---
+
+#### 1.7 Frontend Types
+**File**: `frontend/src/api.ts`
+**Changes**: Add Output interface and update Cell
+
+```typescript
+export interface Output {
+  mime_type: string;
+  data: any;
+  metadata?: Record<string, any>;
+}
+
+export interface Cell {
+  id: string;
+  type: 'python' | 'sql';
+  code: string;
+  status: 'idle' | 'running' | 'success' | 'error' | 'blocked';
+  stdout?: string;
+  result?: any;
+  outputs?: Output[];  // NEW
+  error?: string;
+  reads: string[];
+  writes: string[];
+}
+```
+
+**Modify:** [api.ts:3-13](frontend/src/api.ts#L3)
+
+---
+
+#### 1.8 WebSocket Message Types
+**File**: `frontend/src/useWebSocket.ts`
+**Changes**: Add cell_output message type
+
+```typescript
+export type WSMessage =
+  | { type: 'cell_status'; cellId: string; status: string }
+  | { type: 'cell_stdout'; cellId: string; data: string }
+  | { type: 'cell_result'; cellId: string; result: any }
+  | { type: 'cell_error'; cellId: string; error: string }
+  | { type: 'cell_output'; cellId: string; output: { mime_type: string; data: any; metadata?: any } };
+```
+
+**Modify:** [useWebSocket.ts:3-7](frontend/src/useWebSocket.ts#L3)
+
+---
+
+#### 1.9 Frontend Message Handling
+**File**: `frontend/src/components/Notebook.tsx`
+**Changes**: Handle cell_output messages and fix double-run bug
+
+```typescript
+const handleWSMessage = useCallback((msg: WSMessage) => {
+  setNotebook(prev => {
+    if (!prev) return prev;
+
+    const cells = prev.cells.map(cell => {
+      if (cell.id !== msg.cellId) return cell;
+
+      switch (msg.type) {
+        case 'cell_status':
+          if (msg.status === 'running') {
+            // Clear outputs when execution starts
+            return { ...cell, status: 'running', stdout: '', outputs: [], error: null };
+          }
+          return { ...cell, status: msg.status as any };
+
+        case 'cell_stdout':
+          return { ...cell, stdout: msg.data };
+
+        case 'cell_result':
+          return { ...cell, result: msg.result };
+
+        case 'cell_error':
+          return { ...cell, error: msg.error };
+
+        case 'cell_output':
+          const outputs = cell.outputs || [];
+          return { ...cell, outputs: [...outputs, msg.output] };
+
+        default:
+          return cell;
+      }
+    });
+
+    return { ...prev, cells };
+  });
+}, []);
+```
+
+**Replace:** [Notebook.tsx:25-48](frontend/src/components/Notebook.tsx#L25)
+
+---
+
+#### 1.10 Output Renderer Component
+**File**: `frontend/src/components/OutputRenderer.tsx` (NEW FILE)
+
+```typescript
+import React from 'react';
+import { Output } from '../api';
+
+interface OutputRendererProps {
+  output: Output;
+}
+
+export function OutputRenderer({ output }: OutputRendererProps) {
+  switch (output.mime_type) {
+    case 'image/png':
+      return (
+        <img
+          src={`data:image/png;base64,${output.data}`}
+          alt="Chart output"
+          style={{ maxWidth: '100%', height: 'auto' }}
+        />
+      );
+
+    case 'text/html':
+      return (
+        <div
+          dangerouslySetInnerHTML={{ __html: output.data }}
+          style={{ width: '100%' }}
+        />
+      );
+
+    case 'application/vnd.vegalite.v5+json':
+      return (
+        <div style={{
+          backgroundColor: '#f3f4f6',
+          padding: '8px',
+          borderRadius: '4px'
+        }}>
+          <pre>{JSON.stringify(output.data, null, 2)}</pre>
+        </div>
+      );
+
+    case 'application/json':
+      if (output.data.type === 'table') {
+        return (
+          <table style={{
+            width: '100%',
+            borderCollapse: 'collapse',
+            fontSize: '12px'
+          }}>
+            <thead>
+              <tr style={{ backgroundColor: '#e5e7eb' }}>
+                {output.data.columns.map((col: string) => (
+                  <th key={col} style={{
+                    border: '1px solid #d1d5db',
+                    padding: '4px 8px',
+                    textAlign: 'left'
+                  }}>{col}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {output.data.rows.map((row: any[], idx: number) => (
+                <tr key={idx}>
+                  {row.map((val, i) => (
+                    <td key={i} style={{
+                      border: '1px solid #d1d5db',
+                      padding: '4px 8px'
+                    }}>{String(val)}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        );
+      }
+      return <pre>{JSON.stringify(output.data, null, 2)}</pre>;
+
+    case 'text/plain':
+      return (
+        <pre style={{
+          backgroundColor: '#f3f4f6',
+          padding: '8px',
+          borderRadius: '4px',
+          fontSize: '13px',
+          overflow: 'auto',
+          whiteSpace: 'pre-wrap'
+        }}>
+          {output.data}
+        </pre>
+      );
+
+    default:
+      return (
+        <div style={{ color: '#6b7280', fontSize: '12px' }}>
+          Unsupported output type: {output.mime_type}
+        </div>
+      );
+  }
+}
+```
+
+---
+
+#### 1.11 Update Cell Component
+**File**: `frontend/src/components/Cell.tsx`
+**Changes**: Render outputs using OutputRenderer
+
+```typescript
+import { OutputRenderer } from './OutputRenderer';
+
+// In output section (around line 154):
+{cell.status !== 'idle' && (
+  <div style={{ marginTop: '12px' }}>
+    {/* Stdout */}
+    {cell.stdout && (
+      <pre style={{
+        backgroundColor: '#f3f4f6',
+        padding: '8px',
+        borderRadius: '4px',
+        fontSize: '13px',
+        overflow: 'auto',
+        margin: '8px 0'
+      }}>
+        {cell.stdout}
+      </pre>
+    )}
+
+    {/* NEW: Rich outputs */}
+    {cell.outputs && cell.outputs.map((output, idx) => (
+      <div key={idx} style={{
+        backgroundColor: '#f3f4f6',
+        padding: '8px',
+        borderRadius: '4px',
+        marginTop: '8px'
+      }}>
+        <OutputRenderer output={output} />
+      </div>
+    ))}
+
+    {/* Keep existing result/error rendering */}
+  </div>
+)}
+```
+
+**Modify section:** Around [Cell.tsx:154](frontend/src/components/Cell.tsx#L154)
+
+---
+
+### Success Criteria:
+
+#### Automated Verification:
+- None (chart rendering requires visual verification)
+
+#### Manual Verification:
+- [ ] Run `import matplotlib.pyplot as plt; plt.plot([1,2,3]); plt.gcf()` - Chart displays as PNG
+- [ ] Run `import plotly.express as px; px.bar(x=['a','b','c'], y=[4,5,6])` - Interactive chart displays
+- [ ] Run pandas DataFrame - displays as table
+- [ ] Charts have appropriate sizing
+- [ ] Print statements and charts both appear
+
+---
+
+## Phase 2: Standard Package Set
+
+### Overview
+Install required data science packages and frontend libraries.
+
+### Changes Required:
+
+#### 2.1 Python Packages
+**File**: `requirements.txt`
+
+```
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+asyncpg==0.29.0
+pydantic==2.5.0
+websockets==12.0
+pytest==7.4.3
+pytest-asyncio==0.21.1
+mypy==1.7.1
+matplotlib>=3.8.0
+pandas>=2.1.0
+numpy>=1.26.0
+plotly>=5.18.0
+altair>=5.2.0
+```
+
+---
+
+#### 2.2 Frontend Vega Libraries
+**File**: `frontend/package.json`
+
+Add to dependencies:
+```json
+"vega": "^5.27.0",
+"vega-lite": "^5.16.0",
+"vega-embed": "^6.24.0"
+```
+
+---
+
+#### 2.3 Update OutputRenderer for Vega
+**File**: `frontend/src/components/OutputRenderer.tsx`
+
+```typescript
+import embed from 'vega-embed';
+import { useEffect, useRef } from 'react';
+
+// Replace vegalite case with:
+case 'application/vnd.vegalite.v5+json':
+  return <VegaLiteRenderer spec={output.data} />;
+
+// Add at end:
+function VegaLiteRenderer({ spec }: { spec: any }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (containerRef.current) {
+      embed(containerRef.current, spec, {
+        actions: false,
+        renderer: 'svg'
+      });
+    }
+  }, [spec]);
+
+  return <div ref={containerRef} style={{ width: '100%' }} />;
+}
+```
+
+---
+
+### Success Criteria:
+
+#### Automated Verification:
+- [ ] `pip install -r requirements.txt` succeeds
+- [ ] `cd frontend && npm install` succeeds
+- [ ] `python -c "import matplotlib, pandas, numpy, plotly, altair"` succeeds
+
+#### Manual Verification:
+- [ ] All packages import in notebook cells
+- [ ] Altair charts render as interactive SVG
+
+---
+
+## Phase 3: Notebook Persistence
+
+### Overview
+Implement file-based persistence with auto-save and demo notebook.
+
+### Changes Required:
+
+#### 3.1 Storage Layer
+**File**: `backend/storage.py` (NEW FILE)
+
+```python
+import json
+import os
+from pathlib import Path
+from typing import Dict, List
+from models import Notebook, Cell, CellType, CellStatus, Graph, KernelState
+
+NOTEBOOKS_DIR = Path("notebooks")
+
+def ensure_notebooks_dir():
+    NOTEBOOKS_DIR.mkdir(exist_ok=True)
+
+def save_notebook(notebook: Notebook) -> None:
+    ensure_notebooks_dir()
+
+    data = {
+        "id": notebook.id,
+        "db_conn_string": notebook.db_conn_string,
+        "revision": notebook.revision,
+        "cells": [
+            {
+                "id": cell.id,
+                "type": cell.type.value,
+                "code": cell.code,
+                "reads": list(cell.reads),
+                "writes": list(cell.writes)
+            }
+            for cell in notebook.cells
+        ]
+    }
+
+    file_path = NOTEBOOKS_DIR / f"{notebook.id}.json"
+    with open(file_path, 'w') as f:
+        json.dump(data, f, indent=2)
+
+def load_notebook(notebook_id: str) -> Notebook:
+    file_path = NOTEBOOKS_DIR / f"{notebook_id}.json"
+
+    with open(file_path, 'r') as f:
+        data = json.load(f)
+
+    cells = [
+        Cell(
+            id=cell_data["id"],
+            type=CellType(cell_data["type"]),
+            code=cell_data["code"],
+            status=CellStatus.IDLE,
+            reads=set(cell_data.get("reads", [])),
+            writes=set(cell_data.get("writes", []))
+        )
+        for cell_data in data["cells"]
+    ]
+
+    notebook = Notebook(
+        id=data["id"],
+        db_conn_string=data.get("db_conn_string"),
+        cells=cells,
+        revision=data.get("revision", 0)
+    )
+
+    from graph import rebuild_graph
+    rebuild_graph(notebook)
+
+    return notebook
+
+def list_notebooks() -> List[str]:
+    ensure_notebooks_dir()
+    return [f.stem for f in NOTEBOOKS_DIR.glob("*.json")]
+```
+
+---
+
+#### 3.2 Demo Notebook
+**File**: `backend/demo_notebook.py` (NEW FILE)
+
+```python
+import uuid
+from models import Notebook, Cell, CellType, CellStatus
+
+def create_demo_notebook() -> Notebook:
+    cells = [
+        Cell(
+            id=str(uuid.uuid4()),
+            type=CellType.PYTHON,
+            code="x = 10  # Upstream variable",
+            status=CellStatus.IDLE,
+            reads=set(),
+            writes={'x'}
+        ),
+        Cell(
+            id=str(uuid.uuid4()),
+            type=CellType.PYTHON,
+            code="y = x + 5  # Depends on x",
+            status=CellStatus.IDLE,
+            reads={'x'},
+            writes={'y'}
+        ),
+        Cell(
+            id=str(uuid.uuid4()),
+            type=CellType.PYTHON,
+            code="""import matplotlib.pyplot as plt
+plt.figure(figsize=(8, 5))
+plt.plot([1, 2, 3], [x, y, 15], marker='o')
+plt.title(f"Dependency Demo (x={x}, y={y})")
+plt.grid(True)
+plt.gcf()""",
+            status=CellStatus.IDLE,
+            reads={'x', 'y', 'plt'},
+            writes={'plt'}
+        ),
+        Cell(
+            id=str(uuid.uuid4()),
+            type=CellType.PYTHON,
+            code="""import pandas as pd
+df = pd.DataFrame({
+    "category": ["A", "B", "C"],
+    "value": [x, y, x+y]
+})
+df""",
+            status=CellStatus.IDLE,
+            reads={'x', 'y', 'pd'},
+            writes={'df', 'pd'}
+        )
+    ]
+
+    notebook = Notebook(id="demo", cells=cells, revision=0)
+
+    from graph import rebuild_graph
+    rebuild_graph(notebook)
+
+    return notebook
+```
+
+---
+
+#### 3.3 Auto-save Integration
+**File**: `backend/routes.py`
+
+```python
+from storage import save_notebook, load_notebook, list_notebooks
+
+# Add save_notebook() calls after:
+# Line 52 (notebook creation)
+# Line 88 (DB update)
+# Line 116 (cell creation)
+# Line 156 (cell update)
+# Line 181 (cell deletion)
+```
+
+---
+
+#### 3.4 Startup Loading
+**File**: `backend/main.py`
+
+```python
+from storage import list_notebooks, load_notebook, save_notebook
+from demo_notebook import create_demo_notebook
+
+@app.on_event("startup")
+async def startup_event():
+    notebook_ids = list_notebooks()
+
+    if notebook_ids:
+        print(f"Loading {len(notebook_ids)} notebook(s)...")
+        for notebook_id in notebook_ids:
+            try:
+                notebook = load_notebook(notebook_id)
+                NOTEBOOKS[notebook_id] = notebook
+                print(f"  ✓ Loaded: {notebook_id}")
+            except Exception as e:
+                print(f"  ✗ Failed: {notebook_id}: {e}")
+    else:
+        print("Creating demo notebook...")
+        demo = create_demo_notebook()
+        NOTEBOOKS[demo.id] = demo
+        save_notebook(demo)
+        print(f"  ✓ Created demo: {demo.id}")
+```
+
+---
+
+### Success Criteria:
+
+#### Automated Verification:
+- [ ] `ls notebooks/` shows JSON files
+- [ ] Server restart preserves notebooks
+- [ ] `cat notebooks/demo.json` shows valid JSON
+
+#### Manual Verification:
+- [ ] Create notebook, restart, verify persists
+- [ ] Demo notebook loads with examples
+- [ ] Edits to demo persist across restarts
+
+---
+
+## Phase 4: Double-Run Bug Fix
+
+### Changes Required:
+
+**File**: `frontend/src/components/Notebook.tsx`
+
+Already fixed in Phase 1.9 - outputs cleared when status becomes 'running'
+
+---
+
+## Phase 5: Cell Number Traceback Mapping
+
+### Changes Required:
+
+Already implemented in Phase 1.4 - cell_index passed to compile()
+
+---
+
+## Testing Strategy
+
+### Manual Integration Tests:
+
+1. **Chart Rendering:**
+   - Run matplotlib, plotly, altair cells
+   - Verify charts display correctly
+   - Check sizing and styling
+
+2. **Persistence:**
+   - Create notebook, restart, verify persists
+   - Edit demo, restart, verify changes saved
+
+3. **Reactive Charts:**
+   - Cell 1: `x = 5`
+   - Cell 2: matplotlib chart using x
+   - Change x, verify chart updates
+
+4. **Bug Fixes:**
+   - Run cell twice, no duplicate output
+   - Error shows Cell[N] not UUID
+
+---
+
+## Implementation Order
+
+1. Phase 2 (Packages) - 30 min
+2. Phase 4 (Bug fix) - Already in Phase 1
+3. Phase 5 (Traceback) - Already in Phase 1
+4. Phase 1 (MIME bundles) - 3-4 hours
+5. Phase 3 (Persistence) - 2 hours
+
+**Total: 6-8 hours**
