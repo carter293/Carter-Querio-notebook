@@ -25,7 +25,6 @@ class UpdateDbConnectionRequest(BaseModel):
 
 class CreateCellRequest(BaseModel):
     type: CellType
-    after_cell_id: Optional[str] = None
 
 class UpdateCellRequest(BaseModel):
     code: str
@@ -152,17 +151,21 @@ async def create_cell(notebook_id: str, request: CreateCellRequest):
         status=CellStatus.IDLE
     )
 
-    # Insert after specified cell or at end
-    if request.after_cell_id:
-        insert_idx = next(
-            (i + 1 for i, c in enumerate(notebook.cells) if c.id == request.after_cell_id),
-            len(notebook.cells)
-        )
-        notebook.cells.insert(insert_idx, new_cell)
-    else:
-        notebook.cells.append(new_cell)
+    # Append new cell to end
+    notebook.cells.append(new_cell)
 
     save_notebook(notebook)
+    
+    # Broadcast creation via WebSocket
+    await broadcaster.broadcast_cell_created(notebook_id, {
+        "id": new_cell.id,
+        "type": new_cell.type.value,
+        "code": new_cell.code,
+        "status": new_cell.status.value,
+        "reads": [],
+        "writes": []
+    })
+    
     return {"cell_id": new_cell.id}
 
 @router.put("/notebooks/{notebook_id}/cells/{cell_id}")
@@ -203,6 +206,15 @@ async def update_cell(notebook_id: str, cell_id: str, request: UpdateCellRequest
 
     notebook.revision += 1
     save_notebook(notebook)
+    
+    # Broadcast update via WebSocket
+    await broadcaster.broadcast_cell_updated(notebook_id, cell_id, {
+        "code": cell.code,
+        "reads": list(cell.reads),
+        "writes": list(cell.writes),
+        "status": cell.status.value
+    })
+    
     return {"status": "ok"}
 
 @router.delete("/notebooks/{notebook_id}/cells/{cell_id}")
@@ -229,6 +241,10 @@ async def delete_cell(notebook_id: str, cell_id: str):
 
     notebook.revision += 1
     save_notebook(notebook)
+    
+    # Broadcast deletion via WebSocket
+    await broadcaster.broadcast_cell_deleted(notebook_id, cell_id)
+    
     return {"status": "ok"}
 
 # WebSocket endpoint

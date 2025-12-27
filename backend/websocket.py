@@ -81,5 +81,27 @@ class WebSocketBroadcaster:
         }
         await self.broadcast(notebook_id, message)
 
+    async def broadcast_cell_updated(self, notebook_id: str, cell_id: str, cell_data: dict):
+        """Broadcast cell update (code, reads, writes, status)"""
+        await self.broadcast(notebook_id, {
+            "type": "cell_updated",
+            "cellId": cell_id,
+            "cell": cell_data  # {code, reads, writes, status}
+        })
+
+    async def broadcast_cell_created(self, notebook_id: str, cell_data: dict):
+        """Broadcast cell creation"""
+        await self.broadcast(notebook_id, {
+            "type": "cell_created",
+            "cell": cell_data
+        })
+
+    async def broadcast_cell_deleted(self, notebook_id: str, cell_id: str):
+        """Broadcast cell deletion"""
+        await self.broadcast(notebook_id, {
+            "type": "cell_deleted",
+            "cellId": cell_id
+        })
+
 # Global broadcaster instance
 broadcaster = WebSocketBroadcaster()

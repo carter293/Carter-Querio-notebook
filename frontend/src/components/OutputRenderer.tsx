@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { Output, TableData } from '../api';
 import embed from 'vega-embed';
 import type { VisualizationSpec } from 'vega-embed';

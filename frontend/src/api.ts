@@ -71,11 +71,11 @@ export async function updateDbConnection(id: string, connString: string) {
   });
 }
 
-export async function createCell(notebookId: string, type: 'python' | 'sql', afterCellId?: string) {
+export async function createCell(notebookId: string, type: 'python' | 'sql') {
   const res = await fetch(`${API_BASE}/notebooks/${notebookId}/cells`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ type, after_cell_id: afterCellId })
+    body: JSON.stringify({ type })
   });
   return res.json();
 }

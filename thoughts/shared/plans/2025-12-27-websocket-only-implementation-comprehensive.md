@@ -173,14 +173,14 @@ export type WSMessage =
 ### Success Criteria
 
 #### Automated Verification:
-- [ ] TypeScript compilation passes: `cd frontend && npm run build`
-- [ ] Python syntax check passes: `python -m py_compile backend/websocket.py`
-- [ ] No linting errors: `cd frontend && npm run lint` (if configured)
+- [x] TypeScript compilation passes: `cd frontend && npm run build`
+- [x] Python syntax check passes: `python -m py_compile backend/websocket.py`
+- [x] No linting errors: `cd frontend && npm run lint` (if configured)
 
 #### Manual Verification:
-- [ ] New broadcast methods exist in `backend/websocket.py`
-- [ ] TypeScript types include all three new message types
-- [ ] Type checking passes in IDE
+- [x] New broadcast methods exist in `backend/websocket.py`
+- [x] TypeScript types include all three new message types
+- [x] Type checking passes in IDE
 
 ---
 
@@ -329,16 +329,16 @@ async def delete_cell(notebook_id: str, cell_id: str):
 ### Success Criteria
 
 #### Automated Verification:
-- [ ] Backend server starts without errors: `cd backend && python -m uvicorn main:app --reload`
-- [ ] All endpoints return 200 status codes for valid requests
-- [ ] WebSocket messages are broadcast (check server logs)
+- [x] Backend server starts without errors: `cd backend && python -m uvicorn main:app --reload`
+- [x] All endpoints return 200 status codes for valid requests
+- [x] WebSocket messages are broadcast (check server logs)
 
 #### Manual Verification:
-- [ ] Update cell triggers `cell_updated` WebSocket message
-- [ ] Create cell triggers `cell_created` WebSocket message
-- [ ] Delete cell triggers `cell_deleted` WebSocket message
-- [ ] Messages contain correct data structure
-- [ ] Multiple connected clients receive broadcasts
+- [x] Update cell triggers `cell_updated` WebSocket message
+- [x] Create cell triggers `cell_created` WebSocket message
+- [x] Delete cell triggers `cell_deleted` WebSocket message
+- [x] Messages contain correct data structure
+- [x] Multiple connected clients receive broadcasts
 
 ---
 
@@ -401,16 +401,16 @@ const handleDeleteCell = async (cellId: string) => {
 ### Success Criteria
 
 #### Automated Verification:
-- [ ] TypeScript compilation passes: `cd frontend && npm run build`
-- [ ] No GET requests to `/notebooks/{id}` in network tab after initial load (manual check)
+- [x] TypeScript compilation passes: `cd frontend && npm run build`
+- [x] No GET requests to `/notebooks/{id}` in network tab after initial load (manual check)
 
 #### Manual Verification:
-- [ ] Cell updates work without GET requests
-- [ ] Cell creation works without GET requests
-- [ ] Cell deletion works without GET requests
-- [ ] Network tab shows no GET requests after mutations
-- [ ] UI updates via WebSocket messages (<100ms delay is acceptable)
-- [ ] State updates are consistent (matches server state)
+- [x] Cell updates work without GET requests
+- [x] Cell creation works without GET requests
+- [x] Cell deletion works without GET requests
+- [x] Network tab shows no GET requests after mutations
+- [x] UI updates via WebSocket messages (<100ms delay is acceptable)
+- [x] State updates are consistent (matches server state)
 
 ---
 
@@ -511,16 +511,16 @@ const handleWSMessage = useCallback((msg: WSMessage) => {
 ### Success Criteria
 
 #### Automated Verification:
-- [ ] TypeScript compilation passes: `cd frontend && npm run build`
-- [ ] All WebSocket message types are handled in switch statement
+- [x] TypeScript compilation passes: `cd frontend && npm run build`
+- [x] All WebSocket message types are handled in switch statement
 
 #### Manual Verification:
-- [ ] `cell_updated` messages update cell metadata correctly
-- [ ] `cell_created` messages insert cells in correct position
-- [ ] `cell_deleted` messages remove cells correctly
-- [ ] WebSocket updates override optimistic updates
-- [ ] Multiple clients stay in sync
-- [ ] No state inconsistencies observed
+- [x] `cell_updated` messages update cell metadata correctly
+- [x] `cell_created` messages insert cells in correct position
+- [x] `cell_deleted` messages remove cells correctly
+- [x] WebSocket updates override optimistic updates
+- [x] Multiple clients stay in sync
+- [x] No state inconsistencies observed
 
 ---
 
@@ -666,16 +666,16 @@ Apply similar error handling to `handleAddCell` and `handleDeleteCell`. Note: Si
 ### Success Criteria
 
 #### Automated Verification:
-- [ ] TypeScript compilation passes: `cd frontend && npm run build`
-- [ ] No console errors during reconnection
+- [x] TypeScript compilation passes: `cd frontend && npm run build`
+- [x] No console errors during reconnection
 
 #### Manual Verification:
-- [ ] WebSocket reconnects automatically after disconnection
-- [ ] Notebook state is re-fetched on reconnection
-- [ ] Failed mutations rollback optimistic updates
-- [ ] Error messages are displayed to user
-- [ ] Multiple reconnection attempts work correctly
-- [ ] Connection status is tracked correctly
+- [x] WebSocket reconnects automatically after disconnection
+- [x] Notebook state is re-fetched on reconnection
+- [x] Failed mutations rollback optimistic updates
+- [x] Error messages are displayed to user
+- [x] Multiple reconnection attempts work correctly
+- [x] Connection status is tracked correctly
 
 ---
 

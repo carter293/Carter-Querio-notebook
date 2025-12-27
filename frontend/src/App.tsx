@@ -1,38 +1,24 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
+import { Routes, Route, useParams, useNavigate, Navigate } from 'react-router-dom';
 import { Notebook } from './components/Notebook';
 import { NotebookSelector } from './components/NotebookSelector';
 import * as api from './api';
 
-export default function App() {
+function NotebookView() {
+  const { notebookId: notebookIdFromUrl } = useParams<{ notebookId: string }>();
+  const navigate = useNavigate();
   const [notebooks, setNotebooks] = useState<api.NotebookMetadata[]>([]);
-  const [notebookId, setNotebookId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Determine the effective notebook ID (from URL or default to 'demo')
+  const effectiveNotebookId = notebookIdFromUrl || 'demo';
 
   // Load notebook list on mount
   useEffect(() => {
     api.listNotebooks()
       .then(notebookList => {
         setNotebooks(notebookList);
-        
-        // Default behavior: select first notebook if available, otherwise create new
-        if (notebookList.length > 0) {
-          setNotebookId(notebookList[0].id);
-        } else {
-          // No notebooks exist, create a new one
-          api.createNotebook()
-            .then(({ notebook_id }) => {
-              setNotebookId(notebook_id);
-              // Refresh list to include new notebook
-              return api.listNotebooks();
-            })
-            .then(notebookList => {
-              setNotebooks(notebookList);
-            })
-            .catch(err => {
-              setError('Failed to create notebook: ' + err.message);
-            });
-        }
         setLoading(false);
       })
       .catch(err => {
@@ -42,7 +28,7 @@ export default function App() {
   }, []);
 
   const handleSelectNotebook = (selectedId: string) => {
-    setNotebookId(selectedId);
+    navigate(`/${selectedId}`);
     // Note: WebSocket will reconnect automatically via useWebSocket hook
     // when notebookId changes (see Notebook.tsx)
   };
@@ -51,7 +37,7 @@ export default function App() {
     try {
       setLoading(true);
       const { notebook_id } = await api.createNotebook();
-      setNotebookId(notebook_id);
+      navigate(`/${notebook_id}`);
       // Refresh notebook list
       const notebookList = await api.listNotebooks();
       setNotebooks(notebookList);
@@ -59,6 +45,17 @@ export default function App() {
     } catch (err: any) {
       setError('Failed to create notebook: ' + err.message);
       setLoading(false);
+    }
+  };
+
+  const handleRenameNotebook = async (notebookId: string, newName: string) => {
+    try {
+      await api.renameNotebook(notebookId, newName);
+      // Refresh notebook list to get updated names
+      const notebookList = await api.listNotebooks();
+      setNotebooks(notebookList);
+    } catch (err: any) {
+      setError('Failed to rename notebook: ' + err.message);
     }
   };
 
@@ -74,7 +71,7 @@ export default function App() {
     );
   }
 
-  if (loading && !notebookId) {
+  if (loading && !effectiveNotebookId) {
     return (
       <div style={{
         padding: '24px',
@@ -89,12 +86,22 @@ export default function App() {
     <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '24px' }}>
       <NotebookSelector
         notebooks={notebooks}
-        selectedNotebookId={notebookId}
+        selectedNotebookId={effectiveNotebookId}
         onSelectNotebook={handleSelectNotebook}
         onCreateNew={handleCreateNew}
+        onRenameNotebook={handleRenameNotebook}
         loading={loading}
       />
-      {notebookId && <Notebook notebookId={notebookId} />}
+      {effectiveNotebookId && <Notebook notebookId={effectiveNotebookId} />}
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <Routes>
+      <Route path="/" element={<Navigate to="/demo" replace />} />
+      <Route path="/:notebookId" element={<NotebookView />} />
+    </Routes>
   );
 }

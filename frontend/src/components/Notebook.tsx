@@ -25,47 +25,105 @@ export function Notebook({ notebookId }: NotebookProps) {
   const handleWSMessage = useCallback((msg: WSMessage) => {
     setNotebook(prev => {
       if (!prev) return prev;
-
-      const cells = prev.cells.map(cell => {
-        if (cell.id !== msg.cellId) return cell;
-
-        switch (msg.type) {
-          case 'cell_status':
+      
+      switch (msg.type) {
+        case 'cell_updated':
+          // Update cell metadata (code, reads, writes, status)
+          return {
+            ...prev,
+            cells: prev.cells.map(cell =>
+              cell.id === msg.cellId
+                ? { 
+                    ...cell, 
+                    code: msg.cell.code,
+                    reads: msg.cell.reads,
+                    writes: msg.cell.writes,
+                    status: msg.cell.status as api.CellStatus
+                  }
+                : cell
+            )
+          };
+        
+        case 'cell_created':
+          // Append new cell to end
+          return { ...prev, cells: [...prev.cells, msg.cell] };
+        
+        case 'cell_deleted':
+          return {
+            ...prev,
+            cells: prev.cells.filter(c => c.id !== msg.cellId)
+          };
+        
+        // Existing execution handlers...
+        case 'cell_status':
+          const cells = prev.cells.map(cell => {
+            if (cell.id !== msg.cellId) return cell;
             if (msg.status === 'running') {
-              // Clear outputs when execution starts (fixes double-run bug)
-              return { ...cell, status: 'running' as api.CellStatus, stdout: '', outputs: [], error: undefined };
+              // Clear outputs when execution starts
+              return { ...cell, status: msg.status, stdout: '', outputs: [], error: undefined };
             }
             return { ...cell, status: msg.status };
+          });
+          return { ...prev, cells };
 
-          case 'cell_stdout':
-            return { ...cell, stdout: msg.data };
+        case 'cell_stdout':
+          return {
+            ...prev,
+            cells: prev.cells.map(cell =>
+              cell.id === msg.cellId ? { ...cell, stdout: msg.data } : cell
+            )
+          };
 
-          case 'cell_error':
-            return { ...cell, error: msg.error };
+        case 'cell_error':
+          return {
+            ...prev,
+            cells: prev.cells.map(cell =>
+              cell.id === msg.cellId ? { ...cell, error: msg.error } : cell
+            )
+          };
 
-          case 'cell_output':
-            const outputs = cell.outputs || [];
-            return { ...cell, outputs: [...outputs, msg.output] };
+        case 'cell_output':
+          return {
+            ...prev,
+            cells: prev.cells.map(cell => {
+              if (cell.id !== msg.cellId) return cell;
+              const outputs = cell.outputs || [];
+              return { ...cell, outputs: [...outputs, msg.output] };
+            })
+          };
 
-          default:
-            return cell;
-        }
-      });
-
-      return { ...prev, cells };
+        default:
+          return prev;
+      }
     });
   }, []);
 
-  const { sendMessage } = useWebSocket(notebookId, handleWSMessage);
+  const { sendMessage, connected } = useWebSocket(notebookId, handleWSMessage);
+
+  // Re-fetch notebook on reconnection to ensure sync
+  useEffect(() => {
+    if (connected && notebook) {
+      // Re-fetch to ensure we have latest state after reconnection
+      api.getNotebook(notebookId).then(nb => {
+        setNotebook(nb);
+      });
+    }
+  }, [connected, notebookId]); // Only run when connection status changes
 
   const handleRunCell = (cellId: string) => {
     sendMessage({ type: 'run_cell', cellId });
   };
 
   const handleUpdateCell = async (cellId: string, code: string) => {
-    await api.updateCell(notebookId, cellId, code);
-    const updated = await api.getNotebook(notebookId);
-    setNotebook(updated);
+    try {
+      // Send mutation - WebSocket will update state
+      await api.updateCell(notebookId, cellId, code);
+      // No GET request! WebSocket cell_updated message will update state
+    } catch (error) {
+      console.error('Failed to update cell:', error);
+      alert('Failed to update cell. Please try again.');
+      // State remains unchanged - WebSocket message won't arrive on error
+    }
   };
 
   const handleDeleteCell = async (cellId: string) => {
@@ -73,15 +131,27 @@ export function Notebook({ notebookId }: NotebookProps) {
       alert('Cannot delete the last cell');
       return;
     }
-    await api.deleteCell(notebookId, cellId);
-    const updated = await api.getNotebook(notebookId);
-    setNotebook(updated);
+    
+    try {
+      // Send mutation - WebSocket will update state
+      await api.deleteCell(notebookId, cellId);
+      // No GET request! WebSocket cell_deleted message will update state
+    } catch (error) {
+      console.error('Failed to delete cell:', error);
+      alert('Failed to delete cell. Please try again.');
+      // State remains unchanged - WebSocket message won't arrive on error
+    }
   };
 
   const handleAddCell = async (type: 'python' | 'sql') => {
-    await api.createCell(notebookId, type);
-    const updated = await api.getNotebook(notebookId);
-    setNotebook(updated);
+    try {
+      await api.createCell(notebookId, type);
+      // WebSocket will send cell_created message
+    } catch (error) {
+      console.error('Failed to create cell:', error);
+      alert('Failed to create cell. Please try again.');
+      // State remains unchanged - WebSocket message won't arrive on error
+    }
   };
 
   const handleUpdateDbConnection = async () => {
