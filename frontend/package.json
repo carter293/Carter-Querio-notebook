@@ -10,8 +10,10 @@
   },
   "dependencies": {
     "@monaco-editor/react": "^4.6.0",
+    "plotly.js": "^3.3.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "react-plotly.js": "^2.6.0",
     "react-router-dom": "^7.11.0",
     "vega": "^5.27.0",
     "vega-embed": "^6.24.0",
@@ -19,8 +21,10 @@
   },
   "devDependencies": {
     "@hey-api/openapi-ts": "0.82.4",
+    "@types/plotly.js": "^3.0.9",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
+    "@types/react-plotly.js": "^2.6.4",
     "@vitejs/plugin-react": "^4.2.0",
     "typescript": "^5.3.3",
     "vite": "^5.0.0"

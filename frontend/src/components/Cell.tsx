@@ -198,13 +198,13 @@ export function Cell({ cell, onRunCell, onUpdateCell, onDeleteCell }: CellProps)
 
           {/* Rich outputs */}
           {cell.outputs && cell.outputs.map((output, idx) => (
-            <div key={idx} style={{
+            <div key={`${cell.id}-output-${idx}-${cell.status}`} style={{
               backgroundColor: '#f3f4f6',
               padding: '8px',
               borderRadius: '4px',
               marginTop: '8px'
             }}>
-              <OutputRenderer output={output} />
+              <OutputRenderer output={output} cellId={cell.id} outputIndex={idx} />
             </div>
           ))}
 

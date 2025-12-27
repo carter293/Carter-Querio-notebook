@@ -2,9 +2,20 @@ import { useEffect, useRef } from 'react';
 import { Output, TableData } from '../api-client';
 import embed from 'vega-embed';
 import type { VisualizationSpec } from 'vega-embed';
+import Plot from 'react-plotly.js';
+import type { Data, Layout, Config } from 'plotly.js';
 
 interface OutputRendererProps {
   output: Output;
+  cellId?: string;
+  outputIndex?: number;
+}
+
+// PlotlySpec interface - must be defined before the type guard
+interface PlotlySpec {
+  data: Data[];
+  layout?: Partial<Layout>;
+  config?: Partial<Config>;
 }
 
 // Type guard for TableData
@@ -19,7 +30,17 @@ function isTableData(data: unknown): data is TableData {
   );
 }
 
-export function OutputRenderer({ output }: OutputRendererProps) {
+// Type guard for PlotlySpec
+function isPlotlySpec(data: unknown): data is PlotlySpec {
+  return (
+    typeof data === 'object' &&
+    data !== null &&
+    'data' in data &&
+    Array.isArray((data as { data: unknown }).data)
+  );
+}
+
+export function OutputRenderer({ output, cellId, outputIndex }: OutputRendererProps) {
   switch (output.mime_type) {
     case 'image/png':
       if (typeof output.data !== 'string') {
@@ -50,6 +71,12 @@ export function OutputRenderer({ output }: OutputRendererProps) {
       }
       return <div>Error: Expected Vega-Lite spec object</div>;
 
+    case 'application/vnd.plotly.v1+json':
+      if (isPlotlySpec(output.data)) {
+        return <PlotlyRenderer spec={output.data} cellId={cellId} outputIndex={outputIndex} />;
+      }
+      return <div>Error: Expected Plotly spec object</div>;
+
     case 'application/json':
       if (isTableData(output.data)) {
         return (
@@ -60,7 +87,7 @@ export function OutputRenderer({ output }: OutputRendererProps) {
           }}>
             <thead>
               <tr style={{ backgroundColor: '#e5e7eb' }}>
-                {output.data.columns.map((col) => (
+                {output.data.columns.map((col: string) => (
                   <th key={col} style={{
                     border: '1px solid #d1d5db',
                     padding: '4px 8px',
@@ -70,9 +97,9 @@ export function OutputRenderer({ output }: OutputRendererProps) {
               </tr>
             </thead>
             <tbody>
-              {output.data.rows.map((row, idx) => (
+              {output.data.rows.map((row: Array<string | number | boolean | null>, idx: number) => (
                 <tr key={idx}>
-                  {row.map((val, i) => (
+                  {row.map((val: string | number | boolean | null, i: number) => (
                     <td key={i} style={{
                       border: '1px solid #d1d5db',
                       padding: '4px 8px'
@@ -131,4 +158,29 @@ function VegaLiteRenderer({ spec }: VegaLiteRendererProps) {
   }, [spec]);
 
   return <div ref={containerRef} style={{ width: '100%' }} />;
+}
+
+interface PlotlyRendererProps {
+  spec: PlotlySpec;
+  cellId?: string;
+  outputIndex?: number;
+}
+
+function PlotlyRenderer({ spec, cellId, outputIndex }: PlotlyRendererProps) {
+  // Create a unique key that changes when the data changes to force remount
+  // This ensures the Plot component properly unmounts and remounts when cell re-executes
+  const plotKey = cellId && outputIndex !== undefined 
+    ? `${cellId}-${outputIndex}-${JSON.stringify(spec.data).slice(0, 100)}`
+    : `plot-${JSON.stringify(spec.data).slice(0, 100)}`;
+
+  return (
+    <Plot
+      key={plotKey}
+      data={spec.data}
+      layout={spec.layout || {}}
+      config={spec.config || { responsive: true, displayModeBar: true }}
+      style={{ width: '100%' }}
+      useResizeHandler={true}
+    />
+  );
 }

@@ -20,6 +20,7 @@ class MimeType(str, Enum):
     PLAIN = "text/plain"
     VEGA_LITE = "application/vnd.vegalite.v5+json"
     JSON = "application/json"
+    PLOTLY_JSON = "application/vnd.plotly.v1+json"
 
 @dataclass
 class Output:

@@ -32,8 +32,10 @@ def to_mime_bundle(obj: object) -> Optional['Output']:
     try:
         import plotly.graph_objects as go
         if isinstance(obj, go.Figure):
-            html = obj.to_html(include_plotlyjs='cdn', div_id=None)
-            return Output(mime_type=MimeType.HTML, data=html)
+            # Use to_json() for frontend rendering with Plotly.js
+            import json
+            spec = json.loads(obj.to_json())
+            return Output(mime_type=MimeType.PLOTLY_JSON, data=spec)
     except ImportError:
         pass
 

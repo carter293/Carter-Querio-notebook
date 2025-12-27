@@ -18,12 +18,15 @@ import type {
   NotebookResponse,
   ListNotebooksResponse,
   NotebookMetadataResponse,
+  OutputResponse,
 } from './client';
 
 // Re-export with convenient aliases
 export type { CellType, CellStatus };
 export type Cell = CellResponse;
 export type Notebook = NotebookResponse;
+export type NotebookMetadata = NotebookMetadataResponse;
+export type Output = OutputResponse;
 
 // Re-export TableData from generated client (now properly typed in OpenAPI spec)
 export type { TableData } from './client';
