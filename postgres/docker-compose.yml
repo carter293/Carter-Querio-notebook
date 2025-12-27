@@ -1,0 +1,23 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: querio-postgres
+    environment:
+      POSTGRES_USER: querio_user
+      POSTGRES_PASSWORD: querio_password
+      POSTGRES_DB: querio_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/01-init.sql
+      - ./Iris.csv:/docker-entrypoint-initdb.d/Iris.csv
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U querio_user -d querio_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+

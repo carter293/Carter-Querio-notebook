@@ -1,10 +1,11 @@
 import { useEffect, useRef, useCallback } from 'react';
+import { Output, CellStatus } from './api';
 
 export type WSMessage =
-  | { type: 'cell_status'; cellId: string; status: string }
+  | { type: 'cell_status'; cellId: string; status: CellStatus }
   | { type: 'cell_stdout'; cellId: string; data: string }
-  | { type: 'cell_result'; cellId: string; result: any }
-  | { type: 'cell_error'; cellId: string; error: string };
+  | { type: 'cell_error'; cellId: string; error: string }
+  | { type: 'cell_output'; cellId: string; output: Output };
 
 export function useWebSocket(
   notebookId: string,

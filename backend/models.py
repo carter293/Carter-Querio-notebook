@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Optional, Dict, Set, List
+from typing import Optional, Dict, Set, List, Union, Any
 from enum import Enum
 
 class CellType(str, Enum):
@@ -13,6 +13,21 @@ class CellStatus(str, Enum):
     ERROR = "error"
     BLOCKED = "blocked"
 
+class MimeType(str, Enum):
+    """Known MIME types for output rendering"""
+    PNG = "image/png"
+    HTML = "text/html"
+    PLAIN = "text/plain"
+    VEGA_LITE = "application/vnd.vegalite.v5+json"
+    JSON = "application/json"
+
+@dataclass
+class Output:
+    """Single output with MIME type metadata"""
+    mime_type: str  # Use MimeType enum values
+    data: Union[str, dict, list]  # base64 string for images, dict for JSON/tables, HTML string
+    metadata: Dict[str, Union[str, int, float]] = field(default_factory=dict)  # Optional: width, height, etc.
+
 @dataclass
 class Cell:
     id: str
@@ -20,7 +35,7 @@ class Cell:
     code: str
     status: CellStatus = CellStatus.IDLE
     stdout: str = ""
-    result: Optional[object] = None
+    outputs: List[Output] = field(default_factory=list)  # NEW: Replaces result
     error: Optional[str] = None
     reads: Set[str] = field(default_factory=set)  # Variables read
     writes: Set[str] = field(default_factory=set)  # Variables written

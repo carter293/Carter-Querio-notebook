@@ -6,6 +6,7 @@ from ast_parser import extract_dependencies, extract_sql_dependencies
 from graph import rebuild_graph, detect_cycle
 from websocket import broadcaster
 from scheduler import scheduler
+from storage import save_notebook
 import uuid
 
 # In-memory storage
@@ -50,6 +51,7 @@ async def create_notebook():
     )
 
     NOTEBOOKS[notebook_id] = notebook
+    save_notebook(notebook)
     return CreateNotebookResponse(notebook_id=notebook_id)
 
 @router.get("/notebooks/{notebook_id}")
@@ -69,7 +71,14 @@ async def get_notebook(notebook_id: str):
                 "code": cell.code,
                 "status": cell.status,
                 "stdout": cell.stdout,
-                "result": cell.result,
+                "outputs": [
+                    {
+                        "mime_type": output.mime_type,
+                        "data": output.data,
+                        "metadata": output.metadata
+                    }
+                    for output in cell.outputs
+                ],
                 "error": cell.error,
                 "reads": list(cell.reads),
                 "writes": list(cell.writes)
@@ -86,6 +95,7 @@ async def update_db_connection(notebook_id: str, request: UpdateDbConnectionRequ
 
     notebook = NOTEBOOKS[notebook_id]
     notebook.db_conn_string = request.connection_string
+    save_notebook(notebook)
     return {"status": "ok"}
 
 # Cell endpoints
@@ -115,6 +125,7 @@ async def create_cell(notebook_id: str, request: CreateCellRequest):
     else:
         notebook.cells.append(new_cell)
 
+    save_notebook(notebook)
     return {"cell_id": new_cell.id}
 
 @router.put("/notebooks/{notebook_id}/cells/{cell_id}")
@@ -154,6 +165,7 @@ async def update_cell(notebook_id: str, cell_id: str, request: UpdateCellRequest
         cell.error = f"Circular dependency detected: {' -> '.join(cycle)}"
 
     notebook.revision += 1
+    save_notebook(notebook)
     return {"status": "ok"}
 
 @router.delete("/notebooks/{notebook_id}/cells/{cell_id}")
@@ -179,6 +191,7 @@ async def delete_cell(notebook_id: str, cell_id: str):
             notebook.kernel.globals_dict.pop(var, None)
 
     notebook.revision += 1
+    save_notebook(notebook)
     return {"status": "ok"}
 
 # WebSocket endpoint

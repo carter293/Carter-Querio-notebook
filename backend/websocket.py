@@ -67,5 +67,19 @@ class WebSocketBroadcaster:
             "error": error
         })
 
+    async def broadcast_cell_output(
+        self,
+        notebook_id: str,
+        cell_id: str,
+        output: dict
+    ) -> None:
+        """Broadcast a single output (MIME bundle) for a cell"""
+        message = {
+            "type": "cell_output",
+            "cellId": cell_id,
+            "output": output
+        }
+        await self.broadcast(notebook_id, message)
+
 # Global broadcaster instance
 broadcaster = WebSocketBroadcaster()

@@ -106,18 +106,21 @@ class ExecutionScheduler:
         from executor import execute_python_cell, execute_sql_cell
         from models import CellStatus, CellType
 
+        # Get cell index for better error messages
+        cell_index = notebook.cells.index(cell)
+
         # Mark as running
         cell.status = CellStatus.RUNNING
         await broadcaster.broadcast_cell_status(notebook_id, cell.id, CellStatus.RUNNING)
 
         # Clear previous outputs
         cell.stdout = ""
-        cell.result = None
+        cell.outputs = []
         cell.error = None
 
         # Execute based on type
         if cell.type == CellType.PYTHON:
-            result = await execute_python_cell(cell, notebook.kernel.globals_dict)
+            result = await execute_python_cell(cell, notebook.kernel.globals_dict, cell_index)
         elif cell.type == CellType.SQL:
             result = await execute_sql_cell(cell, notebook.db_conn_string, notebook.kernel.globals_dict)
         else:
@@ -130,7 +133,7 @@ class ExecutionScheduler:
         # Update cell
         cell.status = result.status
         cell.stdout = result.stdout
-        cell.result = result.result
+        cell.outputs = result.outputs
         cell.error = result.error
 
         # Broadcast results
@@ -141,8 +144,14 @@ class ExecutionScheduler:
 
         if result.error:
             await broadcaster.broadcast_cell_error(notebook_id, cell.id, result.error)
-        elif result.result is not None:
-            await broadcaster.broadcast_cell_result(notebook_id, cell.id, result.result)
+
+        # Broadcast outputs
+        for output in result.outputs:
+            await broadcaster.broadcast_cell_output(notebook_id, cell.id, {
+                "mime_type": output.mime_type,
+                "data": output.data,
+                "metadata": output.metadata
+            })
 
     def _get_cell(self, notebook, cell_id: str) -> Optional:
         return next((c for c in notebook.cells if c.id == cell_id), None)

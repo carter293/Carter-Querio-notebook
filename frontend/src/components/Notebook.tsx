@@ -31,13 +31,22 @@ export function Notebook({ notebookId }: NotebookProps) {
 
         switch (msg.type) {
           case 'cell_status':
-            return { ...cell, status: msg.status as any };
+            if (msg.status === 'running') {
+              // Clear outputs when execution starts (fixes double-run bug)
+              return { ...cell, status: 'running', stdout: '', outputs: [], error: undefined };
+            }
+            return { ...cell, status: msg.status };
+
           case 'cell_stdout':
-            return { ...cell, stdout: (cell.stdout || '') + msg.data };
-          case 'cell_result':
-            return { ...cell, result: msg.result };
+            return { ...cell, stdout: msg.data };
+
           case 'cell_error':
             return { ...cell, error: msg.error };
+
+          case 'cell_output':
+            const outputs = cell.outputs || [];
+            return { ...cell, outputs: [...outputs, msg.output] };
+
           default:
             return cell;
         }

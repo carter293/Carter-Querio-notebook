@@ -1,12 +1,32 @@
 const API_BASE = 'http://localhost:8000/api';
 
+// Table data structure for pandas DataFrames and SQL results
+export interface TableData {
+  type: 'table';
+  columns: string[];
+  rows: (string | number | boolean | null)[][];
+  truncated?: string;
+}
+
+// Output data can be string (base64, HTML) or structured (JSON, table)
+export type OutputData = string | TableData | Record<string, unknown>;
+
+export interface Output {
+  mime_type: string;
+  data: OutputData;
+  metadata?: Record<string, string | number | boolean>;
+}
+
+export type CellType = 'python' | 'sql';
+export type CellStatus = 'idle' | 'running' | 'success' | 'error' | 'blocked';
+
 export interface Cell {
   id: string;
-  type: 'python' | 'sql';
+  type: CellType;
   code: string;
-  status: 'idle' | 'running' | 'success' | 'error' | 'blocked';
+  status: CellStatus;
   stdout?: string;
-  result?: any;
+  outputs?: Output[];  // NEW: Replaces result
   error?: string;
   reads: string[];
   writes: string[];

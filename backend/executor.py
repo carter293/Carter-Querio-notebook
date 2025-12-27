@@ -1,50 +1,140 @@
 import sys
 import traceback
-from io import StringIO
+import base64
+from io import StringIO, BytesIO
 from contextlib import redirect_stdout
-from typing import Optional, Dict, Any, TYPE_CHECKING
+from typing import Optional, Dict, Any, Union, List, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from models import Cell, CellStatus
+    from models import Cell, CellStatus, Output
 else:
     Cell = 'Cell'
     CellStatus = 'CellStatus'
+    Output = 'Output'
+
+def to_mime_bundle(obj: object) -> Optional['Output']:
+    """Convert Python object to MIME bundle output"""
+    from models import Output, MimeType
+
+    # Matplotlib figure
+    try:
+        import matplotlib.pyplot as plt
+        if isinstance(obj, plt.Figure):
+            buf = BytesIO()
+            obj.savefig(buf, format='png', bbox_inches='tight', dpi=100)
+            buf.seek(0)
+            img_base64 = base64.b64encode(buf.read()).decode('utf-8')
+            return Output(mime_type=MimeType.PNG, data=img_base64)
+    except ImportError:
+        pass
+
+    # Plotly figure
+    try:
+        import plotly.graph_objects as go
+        if isinstance(obj, go.Figure):
+            html = obj.to_html(include_plotlyjs='cdn', div_id=None)
+            return Output(mime_type=MimeType.HTML, data=html)
+    except ImportError:
+        pass
+
+    # Altair chart
+    try:
+        import altair as alt
+        if isinstance(obj, alt.Chart):
+            vega_json = obj.to_dict()
+            return Output(mime_type=MimeType.VEGA_LITE, data=vega_json)
+    except ImportError:
+        pass
+
+    # Pandas DataFrame
+    try:
+        import pandas as pd
+        if isinstance(obj, pd.DataFrame):
+            table_data = {
+                "type": "table",
+                "columns": obj.columns.tolist(),
+                "rows": obj.values.tolist()
+            }
+            return Output(mime_type=MimeType.JSON, data=table_data)
+    except ImportError:
+        pass
+
+    # Fallback: convert to string
+    return Output(mime_type=MimeType.PLAIN, data=str(obj))
 
 class ExecutionResult:
-    def __init__(self, status, stdout: str = "",
-                 result: Any = None, error: Optional[str] = None):
-        self.status = status
-        self.stdout = stdout
-        self.result = result
-        self.error = error
+    def __init__(
+        self,
+        status: 'CellStatus',
+        stdout: str = "",
+        error: Optional[str] = None,
+        outputs: Optional[List['Output']] = None
+    ):
+        self.status: 'CellStatus' = status
+        self.stdout: str = stdout
+        self.error: Optional[str] = error
+        self.outputs: List['Output'] = outputs or []
 
-async def execute_python_cell(cell, globals_dict: Dict[str, Any]) -> ExecutionResult:
+async def execute_python_cell(
+    cell: 'Cell',
+    globals_dict: Dict[str, Any],
+    cell_index: int = 0
+) -> ExecutionResult:
     """
-    Execute Python code in cell, capturing stdout and errors.
-    Updates globals_dict in place.
+    Execute Python code in cell, capturing stdout and last expression value.
     """
     from models import CellStatus
+    import ast
 
     stdout_capture = StringIO()
+    outputs: List['Output'] = []
 
     try:
-        # Compile code
-        compiled = compile(cell.code, f"<cell-{cell.id}>", "exec")
+        # Try to parse as expression first
+        try:
+            compiled = compile(cell.code, f"Cell[{cell_index}]", "eval")
+            with redirect_stdout(stdout_capture):
+                result_value = eval(compiled, globals_dict)
 
-        # Execute with stdout capture
-        with redirect_stdout(stdout_capture):
-            exec(compiled, globals_dict)
+            # Convert result to MIME bundle
+            if result_value is not None:
+                output = to_mime_bundle(result_value)
+                if output:
+                    outputs.append(output)
 
-        # Success
+        except SyntaxError:
+            # Not a simple expression, compile as statements
+            tree = ast.parse(cell.code)
+
+            if tree.body and isinstance(tree.body[-1], ast.Expr):
+                # Last statement is an expression
+                exec_code = compile(ast.Module(body=tree.body[:-1], type_ignores=[]),
+                                   f"Cell[{cell_index}]", "exec")
+                eval_code = compile(ast.Expression(body=tree.body[-1].value),
+                                   f"Cell[{cell_index}]", "eval")
+
+                with redirect_stdout(stdout_capture):
+                    exec(exec_code, globals_dict)
+                    result_value = eval(eval_code, globals_dict)
+
+                if result_value is not None:
+                    output = to_mime_bundle(result_value)
+                    if output:
+                        outputs.append(output)
+            else:
+                # No trailing expression
+                compiled = compile(cell.code, f"Cell[{cell_index}]", "exec")
+                with redirect_stdout(stdout_capture):
+                    exec(compiled, globals_dict)
+
         stdout_text = stdout_capture.getvalue()
         return ExecutionResult(
             status=CellStatus.SUCCESS,
             stdout=stdout_text,
-            result=None  # Could extract last expression value if needed
+            outputs=outputs
         )
 
     except SyntaxError as e:
-        # Format with line number and context
         error_msg = f"SyntaxError on line {e.lineno}: {e.msg}"
         if e.text:
             error_msg += f"\n{e.text.rstrip()}"
@@ -56,7 +146,6 @@ async def execute_python_cell(cell, globals_dict: Dict[str, Any]) -> ExecutionRe
         )
 
     except Exception as e:
-        # Capture full traceback
         error_msg = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
         return ExecutionResult(
             status=CellStatus.ERROR,
@@ -66,9 +155,9 @@ async def execute_python_cell(cell, globals_dict: Dict[str, Any]) -> ExecutionRe
 async def execute_sql_cell(cell, conn_string: str, globals_dict: Dict[str, Any]) -> ExecutionResult:
     """
     Execute SQL query against PostgreSQL database.
-    Returns result as table (columns + rows).
+    Returns result as table (columns + rows) in outputs.
     """
-    from models import CellStatus
+    from models import CellStatus, Output, MimeType
     from ast_parser import substitute_sql_variables
 
     if not conn_string:
@@ -88,6 +177,7 @@ async def execute_sql_cell(cell, conn_string: str, globals_dict: Dict[str, Any])
         try:
             result = await conn.fetch(substituted_sql)
 
+            outputs: List['Output'] = []
             # Convert to dict format
             if result:
                 columns = list(result[0].keys())
@@ -100,18 +190,21 @@ async def execute_sql_cell(cell, conn_string: str, globals_dict: Dict[str, Any])
                     rows = rows[:MAX_ROWS]
                     truncated_msg = f"(Showing first {MAX_ROWS} of {len(result)} rows)"
 
-                result_data = {
+                table_data = {
                     "type": "table",
                     "columns": columns,
                     "rows": rows,
                     "truncated": truncated_msg
                 }
+                outputs.append(Output(mime_type=MimeType.JSON, data=table_data))
             else:
-                result_data = {"type": "empty", "message": "Query returned no rows"}
+                # Empty result - just show via plain text in stdout or skip
+                pass
 
             return ExecutionResult(
                 status=CellStatus.SUCCESS,
-                result=result_data
+                outputs=outputs,
+                stdout="Query returned no rows" if not result else ""
             )
         finally:
             await conn.close()

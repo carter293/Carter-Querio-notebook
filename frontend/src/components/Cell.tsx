@@ -3,6 +3,7 @@ import Editor, { OnMount } from '@monaco-editor/react';
 import type { editor } from 'monaco-editor';
 import { KeyMod, KeyCode } from 'monaco-editor';
 import { Cell as CellType } from '../api';
+import { OutputRenderer } from './OutputRenderer';
 
 interface CellProps {
   cell: CellType;
@@ -181,6 +182,7 @@ export function Cell({ cell, onRunCell, onUpdateCell, onDeleteCell }: CellProps)
       {/* Output */}
       {cell.status !== 'idle' && (
         <div style={{ marginTop: '12px' }}>
+          {/* Stdout */}
           {cell.stdout && (
             <pre style={{
               backgroundColor: '#f3f4f6',
@@ -194,60 +196,19 @@ export function Cell({ cell, onRunCell, onUpdateCell, onDeleteCell }: CellProps)
             </pre>
           )}
 
-          {cell.result && (
-            <div style={{
+          {/* Rich outputs */}
+          {cell.outputs && cell.outputs.map((output, idx) => (
+            <div key={idx} style={{
               backgroundColor: '#f3f4f6',
               padding: '8px',
               borderRadius: '4px',
-              fontSize: '13px',
               marginTop: '8px'
             }}>
-              {cell.result.type === 'table' && (
-                <div>
-                  <table style={{
-                    width: '100%',
-                    borderCollapse: 'collapse',
-                    fontSize: '12px'
-                  }}>
-                    <thead>
-                      <tr style={{ backgroundColor: '#e5e7eb' }}>
-                        {cell.result.columns.map((col: string) => (
-                          <th key={col} style={{
-                            border: '1px solid #d1d5db',
-                            padding: '4px 8px',
-                            textAlign: 'left'
-                          }}>{col}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {cell.result.rows.map((row: any[], idx: number) => (
-                        <tr key={idx}>
-                          {row.map((val, i) => (
-                            <td key={i} style={{
-                              border: '1px solid #d1d5db',
-                              padding: '4px 8px'
-                            }}>{String(val)}</td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {cell.result.truncated && (
-                    <p style={{ fontSize: '11px', color: '#6b7280', marginTop: '4px' }}>
-                      {cell.result.truncated}
-                    </p>
-                  )}
-                </div>
-              )}
-              {cell.result.type === 'empty' && (
-                <p style={{ fontSize: '12px', color: '#6b7280' }}>
-                  {cell.result.message}
-                </p>
-              )}
+              <OutputRenderer output={output} />
             </div>
-          )}
+          ))}
 
+          {/* Error */}
           {cell.error && (
             <pre style={{
               backgroundColor: '#fef2f2',
@@ -262,6 +223,7 @@ export function Cell({ cell, onRunCell, onUpdateCell, onDeleteCell }: CellProps)
             </pre>
           )}
 
+          {/* Blocked status */}
           {cell.status === 'blocked' && !cell.error && (
             <div style={{
               backgroundColor: '#fffbeb',
@@ -271,7 +233,7 @@ export function Cell({ cell, onRunCell, onUpdateCell, onDeleteCell }: CellProps)
               fontSize: '13px',
               marginTop: '8px'
             }}>
-              ⚠️ Upstream dependency failed. This cell cannot run until upstream errors are fixed.
+              ⚠️ Upstream dependency failed.
             </div>
           )}
         </div>
