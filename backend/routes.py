@@ -6,7 +6,7 @@ from ast_parser import extract_dependencies, extract_sql_dependencies
 from graph import rebuild_graph, detect_cycle
 from websocket import broadcaster
 from scheduler import scheduler
-from storage import save_notebook
+from storage import save_notebook, list_notebooks
 import uuid
 
 # In-memory storage
@@ -29,6 +29,9 @@ class CreateCellRequest(BaseModel):
 
 class UpdateCellRequest(BaseModel):
     code: str
+
+class RenameNotebookRequest(BaseModel):
+    name: str
 
 # Notebook endpoints
 
@@ -54,6 +57,28 @@ async def create_notebook():
     save_notebook(notebook)
     return CreateNotebookResponse(notebook_id=notebook_id)
 
+@router.get("/notebooks")
+async def list_notebooks_endpoint():
+    """List all available notebooks"""
+    notebook_ids = list_notebooks()
+    
+    notebooks = []
+    for notebook_id in notebook_ids:
+        if notebook_id in NOTEBOOKS:
+            notebook = NOTEBOOKS[notebook_id]
+            notebooks.append({
+                "id": notebook.id,
+                "name": notebook.name or notebook.id
+            })
+        else:
+            # Notebook exists on disk but not in memory (shouldn't happen, but handle gracefully)
+            notebooks.append({
+                "id": notebook_id,
+                "name": notebook_id
+            })
+    
+    return {"notebooks": notebooks}
+
 @router.get("/notebooks/{notebook_id}")
 async def get_notebook(notebook_id: str):
     """Get notebook details"""
@@ -63,6 +88,7 @@ async def get_notebook(notebook_id: str):
     notebook = NOTEBOOKS[notebook_id]
     return {
         "id": notebook.id,
+        "name": notebook.name,
         "db_conn_string": notebook.db_conn_string,
         "cells": [
             {
@@ -97,6 +123,17 @@ async def update_db_connection(notebook_id: str, request: UpdateDbConnectionRequ
     notebook.db_conn_string = request.connection_string
     save_notebook(notebook)
     return {"status": "ok"}
+
+@router.put("/notebooks/{notebook_id}/name")
+async def rename_notebook(notebook_id: str, request: RenameNotebookRequest):
+    """Update notebook name"""
+    if notebook_id not in NOTEBOOKS:
+        raise HTTPException(status_code=404, detail="Notebook not found")
+    
+    notebook = NOTEBOOKS[notebook_id]
+    notebook.name = request.name.strip() if request.name.strip() else None
+    save_notebook(notebook)
+    return {"status": "ok", "name": notebook.name}
 
 # Cell endpoints
 

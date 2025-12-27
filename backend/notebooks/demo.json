@@ -1,12 +1,13 @@
 {
   "id": "demo",
+  "name": null,
   "db_conn_string": null,
-  "revision": 0,
+  "revision": 1,
   "cells": [
     {
       "id": "c1341f53-02f8-469c-84d9-0f1cf9321843",
       "type": "python",
-      "code": "x = 10  # Upstream variable",
+      "code": "x = 10 + 1  # Upstream variable",
       "reads": [],
       "writes": [
         "x"
@@ -28,8 +29,8 @@
       "type": "python",
       "code": "import matplotlib.pyplot as plt\n\n# Matplotlib chart - rendered as PNG\nplt.figure(figsize=(8, 5))\nplt.plot([1, 2, 3], [x, y, 15], marker='o', linewidth=2)\nplt.title(f\"Matplotlib: Dependency Demo (x={x}, y={y})\")\nplt.xlabel(\"Step\")\nplt.ylabel(\"Value\")\nplt.grid(True, alpha=0.3)\nplt.gcf()",
       "reads": [
-        "x",
         "plt",
+        "x",
         "y"
       ],
       "writes": [
@@ -41,9 +42,9 @@
       "type": "python",
       "code": "import pandas as pd\n\n# Create DataFrame\ndf = pd.DataFrame({\n    \"category\": [\"A\", \"B\", \"C\", \"D\"],\n    \"value\": [x, y, x+y, x*2],\n    \"label\": [\"X\", \"Y\", \"Sum\", \"Double\"]\n})\ndf",
       "reads": [
+        "pd",
         "x",
-        "y",
-        "pd"
+        "y"
       ],
       "writes": [
         "pd",
@@ -56,12 +57,12 @@
       "code": "import plotly.express as px\n\n# Plotly interactive chart - rendered as HTML\nfig = px.bar(\n    df,\n    x=\"category\",\n    y=\"value\",\n    title=f\"Plotly: Interactive Bar Chart (x={x})\",\n    labels={\"value\": \"Amount\", \"category\": \"Category\"},\n    text=\"label\",\n    color=\"value\",\n    color_continuous_scale=\"viridis\"\n)\nfig.update_traces(textposition='outside')\nfig.update_layout(height=400)\nfig",
       "reads": [
         "x",
-        "px",
-        "df"
+        "df",
+        "px"
       ],
       "writes": [
-        "fig",
-        "px"
+        "px",
+        "fig"
       ]
     },
     {
@@ -69,12 +70,12 @@
       "type": "python",
       "code": "import altair as alt\n\n# Altair chart - rendered as Vega-Lite JSON\nchart = alt.Chart(df).mark_bar().encode(\n    x=alt.X('category:N', title='Category'),\n    y=alt.Y('value:Q', title='Value'),\n    color=alt.Color('value:Q', scale=alt.Scale(scheme='viridis')),\n    tooltip=['category', 'value', 'label']\n).properties(\n    title='Altair: Declarative Visualization',\n    width=400,\n    height=300\n)\nchart",
       "reads": [
-        "alt",
-        "df"
+        "df",
+        "alt"
       ],
       "writes": [
-        "chart",
-        "alt"
+        "alt",
+        "chart"
       ]
     }
   ]

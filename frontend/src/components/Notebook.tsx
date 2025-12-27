@@ -33,7 +33,7 @@ export function Notebook({ notebookId }: NotebookProps) {
           case 'cell_status':
             if (msg.status === 'running') {
               // Clear outputs when execution starts (fixes double-run bug)
-              return { ...cell, status: 'running', stdout: '', outputs: [], error: undefined };
+              return { ...cell, status: 'running' as api.CellStatus, stdout: '', outputs: [], error: undefined };
             }
             return { ...cell, status: msg.status };
 
@@ -98,7 +98,7 @@ export function Notebook({ notebookId }: NotebookProps) {
   }
 
   return (
-    <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '24px' }}>
+    <div>
       <h1 style={{ fontSize: '28px', fontWeight: 'bold', marginBottom: '24px' }}>
         Reactive Notebook
       </h1>

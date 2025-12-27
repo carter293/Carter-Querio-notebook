@@ -14,6 +14,7 @@ def save_notebook(notebook: Notebook) -> None:
 
     data = {
         "id": notebook.id,
+        "name": notebook.name,
         "db_conn_string": notebook.db_conn_string,
         "revision": notebook.revision,
         "cells": [
@@ -52,6 +53,7 @@ def load_notebook(notebook_id: str) -> Notebook:
 
     notebook = Notebook(
         id=data["id"],
+        name=data.get("name"), 
         db_conn_string=data.get("db_conn_string"),
         cells=cells,
         revision=data.get("revision", 0)

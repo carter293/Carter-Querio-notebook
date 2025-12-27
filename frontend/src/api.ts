@@ -32,8 +32,14 @@ export interface Cell {
   writes: string[];
 }
 
+export interface NotebookMetadata {
+  id: string;
+  name: string;
+}
+
 export interface Notebook {
   id: string;
+  name?: string; 
   db_conn_string?: string;
   cells: Cell[];
 }
@@ -46,6 +52,15 @@ export async function createNotebook(): Promise<{ notebook_id: string }> {
 export async function getNotebook(id: string): Promise<Notebook> {
   const res = await fetch(`${API_BASE}/notebooks/${id}`);
   return res.json();
+}
+
+export async function listNotebooks(): Promise<NotebookMetadata[]> {
+  const res = await fetch(`${API_BASE}/notebooks`);
+  if (!res.ok) {
+    throw new Error(`Failed to list notebooks: ${res.statusText}`);
+  }
+  const data = await res.json();
+  return data.notebooks;
 }
 
 export async function updateDbConnection(id: string, connString: string) {
@@ -77,4 +92,15 @@ export async function deleteCell(notebookId: string, cellId: string) {
   await fetch(`${API_BASE}/notebooks/${notebookId}/cells/${cellId}`, {
     method: 'DELETE'
   });
+}
+
+export async function renameNotebook(notebookId: string, name: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/notebooks/${notebookId}/name`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name })
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to rename notebook: ${res.statusText}`);
+  }
 }

@@ -76,6 +76,7 @@ class KernelState:
 @dataclass
 class Notebook:
     id: str
+    name: Optional[str] = None
     db_conn_string: Optional[str] = None
     cells: List[Cell] = field(default_factory=list)
     graph: Graph = field(default_factory=Graph)
