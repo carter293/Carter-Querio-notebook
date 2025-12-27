@@ -117,19 +117,20 @@ Install `@hey-api/openapi-ts` and create configuration file to generate TypeScri
 
 #### 1. Install Dependencies
 **File**: `frontend/package.json`
-**Changes**: Add `@hey-api/openapi-ts` and `@hey-api/client-fetch` as dev dependencies
+**Changes**: Add `@hey-api/openapi-ts` as dev dependency
 
 ```json
 {
   "devDependencies": {
-    "@hey-api/openapi-ts": "^1.0.0",
-    "@hey-api/client-fetch": "^1.0.0",
+    "@hey-api/openapi-ts": "0.82.4",
     // ... existing devDependencies
   }
 }
 ```
 
-**Note**: Pin exact version (`-E` flag) as library doesn't follow semantic versioning strictly.
+**Note**: 
+- Pin exact version (`-E` flag) as library doesn't follow semantic versioning strictly.
+- `@hey-api/client-fetch` is deprecated (as of v0.73.0) and is now bundled directly within `@hey-api/openapi-ts`. The Fetch client is included by default, so no separate installation is needed.
 
 #### 2. Create Configuration File
 **File**: `frontend/openapi-ts.config.ts`
@@ -144,7 +145,8 @@ export default defineConfig({
     path: 'src/client',
     format: 'prettier',
   },
-  client: '@hey-api/client-fetch',
+  // Fetch client is the default and is bundled with @hey-api/openapi-ts
+  // No need to specify client option unless using a different client
 });
 ```
 
@@ -180,10 +182,10 @@ if __name__ == '__main__':
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Package installation succeeds: `cd frontend && npm install`
-- [ ] Configuration file exists: `test -f frontend/openapi-ts.config.ts`
-- [ ] TypeScript compilation passes: `cd frontend && npm run build` (should still work)
-- [ ] Script added to package.json: `grep -q "generate:api" frontend/package.json`
+- [x] Package installation succeeds: `cd frontend && npm install`
+- [x] Configuration file exists: `test -f frontend/openapi-ts.config.ts`
+- [x] TypeScript compilation passes: `cd frontend && npm run build` (should still work)
+- [x] Script added to package.json: `grep -q "generate:api" frontend/package.json`
 
 #### Manual Verification:
 - [ ] Configuration file syntax is correct (no TypeScript errors)
@@ -245,10 +247,10 @@ Verify all endpoints are present:
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Generation command runs without errors: `cd frontend && npm run generate:api`
-- [ ] Generated files exist: `test -d frontend/src/client && test -f frontend/src/client/index.ts`
-- [ ] TypeScript compilation passes: `cd frontend && npm run build`
-- [ ] No TypeScript errors in generated files: `cd frontend && npx tsc --noEmit`
+- [x] Generation command runs without errors: `cd frontend && npm run generate:api`
+- [x] Generated files exist: `test -d frontend/src/client && test -f frontend/src/client/index.ts`
+- [x] TypeScript compilation passes: `cd frontend && npm run build`
+- [x] No TypeScript errors in generated files: `cd frontend && npx tsc --noEmit`
 
 #### Manual Verification:
 - [ ] Generated client structure matches expected pattern
@@ -388,10 +390,10 @@ export async function deleteCell(notebookId: string, cellId: string): Promise<vo
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] TypeScript compilation passes: `cd frontend && npm run build`
-- [ ] No type errors: `cd frontend && npx tsc --noEmit`
-- [ ] All exported functions match current `api.ts` interface
-- [ ] Types are properly exported for backward compatibility
+- [x] TypeScript compilation passes: `cd frontend && npm run build`
+- [x] No type errors: `cd frontend && npx tsc --noEmit`
+- [x] All exported functions match current `api.ts` interface
+- [x] Types are properly exported for backward compatibility
 
 #### Manual Verification:
 - [ ] Wrapper functions match current API function signatures
@@ -438,10 +440,10 @@ import type { NotebookMetadata } from '../api-client';
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] TypeScript compilation passes: `cd frontend && npm run build`
-- [ ] No type errors: `cd frontend && npx tsc --noEmit`
-- [ ] All imports resolve correctly
-- [ ] No unused imports remain
+- [x] TypeScript compilation passes: `cd frontend && npm run build`
+- [x] No type errors: `cd frontend && npx tsc --noEmit`
+- [x] All imports resolve correctly
+- [x] No unused imports remain
 
 #### Manual Verification:
 - [ ] Application starts without errors: `cd frontend && npm run dev`
@@ -570,9 +572,9 @@ input: '../openapi.json', // Relative to frontend directory
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Old API file removed: `test ! -f frontend/src/api.ts`
-- [ ] No references to old API file: `grep -r "from './api'" frontend/src` (should return nothing)
-- [ ] Documentation file updated: `grep -q "generate:api" README.md` (or frontend/README.md)
+- [x] Old API functions removed from api.ts (kept as types-only file since generated client lacks Notebook/Cell types)
+- [x] All components use api-client: `grep -r "from './api'" frontend/src` (only api-client.ts imports types from api.ts)
+- [x] Documentation file updated: `grep -q "generate:api" README.md`
 
 #### Manual Verification:
 - [ ] README instructions are clear and complete

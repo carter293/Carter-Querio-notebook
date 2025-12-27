@@ -49,6 +49,44 @@ npm run dev
 
 Frontend runs on `http://localhost:3000`
 
+### API Client Generation
+
+The TypeScript API client is automatically generated from the FastAPI OpenAPI specification using [@hey-api/openapi-ts](https://github.com/hey-api/openapi-ts).
+
+#### Regenerating the Client
+
+1. Start the backend server:
+   ```bash
+   cd backend && python main.py
+   ```
+
+2. Generate the client:
+   ```bash
+   cd frontend && npm run generate:api
+   ```
+
+3. The generated client will be in `frontend/src/client/`
+
+#### When to Regenerate
+
+- After adding new API endpoints
+- After modifying request/response models
+- After updating FastAPI route definitions
+
+#### Using Static OpenAPI File (for CI/CD)
+
+Instead of fetching from running server, you can export the OpenAPI spec:
+
+```bash
+cd backend && python export_openapi.py
+```
+
+Then update `frontend/openapi-ts.config.ts` to use the file:
+
+```typescript
+input: '../openapi.json', // Relative to frontend directory
+```
+
 ### Running Tests
 
 ```bash
@@ -77,7 +115,7 @@ pytest backend/tests/ -v
 - **Cell.tsx**: Individual cell component with Monaco editor
 - **Notebook.tsx**: Notebook container with WebSocket integration
 - **App.tsx**: Main application component
-- **api.ts**: HTTP client for backend API
+- **api-client.ts**: Generated API client wrapper with type definitions (uses OpenAPI-generated client)
 - **useWebSocket.ts**: WebSocket hook for live updates
 
 ## How It Works

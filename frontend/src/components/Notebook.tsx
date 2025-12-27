@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Cell } from './Cell';
 import { useWebSocket, WSMessage } from '../useWebSocket';
-import * as api from '../api';
+import * as api from '../api-client';
 
 interface NotebookProps {
   notebookId: string;

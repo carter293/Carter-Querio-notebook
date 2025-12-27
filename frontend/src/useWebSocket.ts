@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
-import { Output, CellStatus, Cell } from './api';
+import { Output, CellStatus, Cell } from './api-client';
 
 export type WSMessage =
   | { type: 'cell_updated'; cellId: string; cell: { code: string; reads: string[]; writes: string[]; status: string } }

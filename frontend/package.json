@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "generate:api": "openapi-ts"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.6.0",
@@ -17,6 +18,7 @@
     "vega-lite": "^5.16.0"
   },
   "devDependencies": {
+    "@hey-api/openapi-ts": "0.82.4",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "@vitejs/plugin-react": "^4.2.0",

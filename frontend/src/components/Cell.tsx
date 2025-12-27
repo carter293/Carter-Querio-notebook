@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import Editor, { OnMount } from '@monaco-editor/react';
 import type { editor } from 'monaco-editor';
 import { KeyMod, KeyCode } from 'monaco-editor';
-import { Cell as CellType } from '../api';
+import { Cell as CellType } from '../api-client';
 import { OutputRenderer } from './OutputRenderer';
 
 interface CellProps {

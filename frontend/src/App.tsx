@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Routes, Route, useParams, useNavigate, Navigate } from 'react-router-dom';
 import { Notebook } from './components/Notebook';
 import { NotebookSelector } from './components/NotebookSelector';
-import * as api from './api';
+import * as api from './api-client';
 
 function NotebookView() {
   const { notebookId: notebookIdFromUrl } = useParams<{ notebookId: string }>();

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import * as api from '../api';
+import * as api from '../api-client';
 
 interface NotebookSelectorProps {
   notebooks: api.NotebookMetadata[];

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
-from typing import Optional, Dict
+from typing import Optional, Dict, List, Union, Literal
 from models import Notebook, Cell, CellType, CellStatus
 from ast_parser import extract_dependencies, extract_sql_dependencies
 from graph import rebuild_graph, detect_cycle
@@ -32,6 +32,46 @@ class UpdateCellRequest(BaseModel):
 class RenameNotebookRequest(BaseModel):
     name: str
 
+# Response models
+class TableData(BaseModel):
+    """Table data structure for pandas DataFrames and SQL results"""
+    type: Literal["table"]  # Required field - must be exactly "table"
+    columns: List[str]
+    rows: List[List[Union[str, int, float, bool, None]]]
+    truncated: Optional[str] = None
+
+class OutputResponse(BaseModel):
+    mime_type: str
+    data: Union[str, TableData, dict, list]
+    metadata: Optional[Dict[str, Union[str, int, float]]] = None
+
+class CellResponse(BaseModel):
+    id: str
+    type: CellType
+    code: str
+    status: CellStatus
+    stdout: Optional[str] = None
+    outputs: List[OutputResponse]  # Required - always provided
+    error: Optional[str] = None
+    reads: List[str]  # Required - always provided
+    writes: List[str]  # Required - always provided
+
+class NotebookMetadataResponse(BaseModel):
+    id: str
+    name: str
+
+class ListNotebooksResponse(BaseModel):
+    notebooks: List[NotebookMetadataResponse]
+
+class NotebookResponse(BaseModel):
+    id: str
+    name: Optional[str] = None
+    db_conn_string: Optional[str] = None
+    cells: List[CellResponse]  # Required - always provided
+
+class CreateCellResponse(BaseModel):
+    cell_id: str
+
 # Notebook endpoints
 
 @router.post("/notebooks", response_model=CreateNotebookResponse)
@@ -56,7 +96,7 @@ async def create_notebook():
     save_notebook(notebook)
     return CreateNotebookResponse(notebook_id=notebook_id)
 
-@router.get("/notebooks")
+@router.get("/notebooks", response_model=ListNotebooksResponse)
 async def list_notebooks_endpoint():
     """List all available notebooks"""
     notebook_ids = list_notebooks()
@@ -65,52 +105,52 @@ async def list_notebooks_endpoint():
     for notebook_id in notebook_ids:
         if notebook_id in NOTEBOOKS:
             notebook = NOTEBOOKS[notebook_id]
-            notebooks.append({
-                "id": notebook.id,
-                "name": notebook.name or notebook.id
-            })
+            notebooks.append(NotebookMetadataResponse(
+                id=notebook.id,
+                name=notebook.name or notebook.id
+            ))
         else:
             # Notebook exists on disk but not in memory (shouldn't happen, but handle gracefully)
-            notebooks.append({
-                "id": notebook_id,
-                "name": notebook_id
-            })
+            notebooks.append(NotebookMetadataResponse(
+                id=notebook_id,
+                name=notebook_id
+            ))
     
-    return {"notebooks": notebooks}
+    return ListNotebooksResponse(notebooks=notebooks)
 
-@router.get("/notebooks/{notebook_id}")
+@router.get("/notebooks/{notebook_id}", response_model=NotebookResponse)
 async def get_notebook(notebook_id: str):
     """Get notebook details"""
     if notebook_id not in NOTEBOOKS:
         raise HTTPException(status_code=404, detail="Notebook not found")
 
     notebook = NOTEBOOKS[notebook_id]
-    return {
-        "id": notebook.id,
-        "name": notebook.name,
-        "db_conn_string": notebook.db_conn_string,
-        "cells": [
-            {
-                "id": cell.id,
-                "type": cell.type,
-                "code": cell.code,
-                "status": cell.status,
-                "stdout": cell.stdout,
-                "outputs": [
-                    {
-                        "mime_type": output.mime_type,
-                        "data": output.data,
-                        "metadata": output.metadata
-                    }
+    return NotebookResponse(
+        id=notebook.id,
+        name=notebook.name,
+        db_conn_string=notebook.db_conn_string,
+        cells=[
+            CellResponse(
+                id=cell.id,
+                type=cell.type,
+                code=cell.code,
+                status=cell.status,
+                stdout=cell.stdout,
+                outputs=[
+                    OutputResponse(
+                        mime_type=output.mime_type,
+                        data=output.data,
+                        metadata=output.metadata
+                    )
                     for output in cell.outputs
                 ],
-                "error": cell.error,
-                "reads": list(cell.reads),
-                "writes": list(cell.writes)
-            }
+                error=cell.error,
+                reads=list(cell.reads),
+                writes=list(cell.writes)
+            )
             for cell in notebook.cells
         ]
-    }
+    )
 
 @router.put("/notebooks/{notebook_id}/db")
 async def update_db_connection(notebook_id: str, request: UpdateDbConnectionRequest):
@@ -136,7 +176,7 @@ async def rename_notebook(notebook_id: str, request: RenameNotebookRequest):
 
 # Cell endpoints
 
-@router.post("/notebooks/{notebook_id}/cells")
+@router.post("/notebooks/{notebook_id}/cells", response_model=CreateCellResponse)
 async def create_cell(notebook_id: str, request: CreateCellRequest):
     """Create a new cell"""
     if notebook_id not in NOTEBOOKS:
@@ -166,7 +206,7 @@ async def create_cell(notebook_id: str, request: CreateCellRequest):
         "writes": []
     })
     
-    return {"cell_id": new_cell.id}
+    return CreateCellResponse(cell_id=new_cell.id)
 
 @router.put("/notebooks/{notebook_id}/cells/{cell_id}")
 async def update_cell(notebook_id: str, cell_id: str, request: UpdateCellRequest):
