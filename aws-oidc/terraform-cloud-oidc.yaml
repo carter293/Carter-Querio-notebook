@@ -1,0 +1,120 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'OIDC Identity Provider and IAM Role for Terraform Cloud Dynamic Credentials'
+
+Parameters:
+  TerraformOrganization:
+    Type: String
+    Default: 'carter-querio'
+    Description: 'Terraform Cloud organization name'
+  
+  TerraformWorkspace:
+    Type: String
+    Default: 'aws'
+    Description: 'Terraform Cloud workspace name'
+  
+  OIDCThumbprint:
+    Type: String
+    Default: '9e99a48a9960b14926bb7f3b02e22da2b0ab7280'
+    Description: 'Thumbprint for app.terraform.io (usually this default is correct)'
+  
+  RoleName:
+    Type: String
+    Default: 'TerraformCloudRole'
+    Description: 'Name for the IAM role'
+
+Resources:
+  # OIDC Identity Provider for Terraform Cloud
+  TerraformCloudOIDCProvider:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: https://app.terraform.io
+      ClientIdList:
+        - aws.workload.identity
+      ThumbprintList:
+        - !Ref OIDCThumbprint
+      Tags:
+        - Key: Name
+          Value: terraform-cloud-oidc
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: Purpose
+          Value: Terraform Cloud Dynamic Credentials
+
+  # IAM Role for Terraform Cloud
+  TerraformCloudRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref RoleName
+      Description: 'Role for Terraform Cloud to assume via OIDC'
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !GetAtt TerraformCloudOIDCProvider.Arn
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                app.terraform.io:aud: aws.workload.identity
+              StringLike:
+                app.terraform.io:sub: !Sub 'organization:${TerraformOrganization}:project:*:workspace:${TerraformWorkspace}:run_phase:*'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
+      Tags:
+        - Key: Name
+          Value: !Ref RoleName
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: TerraformOrganization
+          Value: !Ref TerraformOrganization
+        - Key: TerraformWorkspace
+          Value: !Ref TerraformWorkspace
+
+  # Custom policy for additional permissions (if needed)
+  TerraformCloudRolePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: TerraformCloudAdditionalPermissions
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowIAMPassRole
+            Effect: Allow
+            Action:
+              - iam:PassRole
+            Resource: '*'
+            Condition:
+              StringEquals:
+                iam:PassedToService:
+                  - ecs-tasks.amazonaws.com
+                  - ec2.amazonaws.com
+      Roles:
+        - !Ref TerraformCloudRole
+
+Outputs:
+  OIDCProviderArn:
+    Description: ARN of the OIDC Identity Provider
+    Value: !GetAtt TerraformCloudOIDCProvider.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-OIDCProviderArn'
+  
+  RoleArn:
+    Description: ARN of the IAM Role for Terraform Cloud
+    Value: !GetAtt TerraformCloudRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-RoleArn'
+  
+  RoleName:
+    Description: Name of the IAM Role
+    Value: !Ref TerraformCloudRole
+    Export:
+      Name: !Sub '${AWS::StackName}-RoleName'
+  
+  TerraformCloudConfiguration:
+    Description: Configuration to add to Terraform Cloud workspace
+    Value: !Sub |
+      Add these environment variables to your Terraform Cloud workspace:
+      TFC_AWS_PROVIDER_AUTH = true
+      TFC_AWS_RUN_ROLE_ARN = ${TerraformCloudRole.Arn}
+

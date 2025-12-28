@@ -9,6 +9,16 @@ import {
   updateCellApiNotebooksNotebookIdCellsCellIdPut,
   deleteCellApiNotebooksNotebookIdCellsCellIdDelete,
 } from './client';
+import { client } from './client/client.gen';
+
+// Configure API base URL from environment variable
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+client.setConfig({
+  baseUrl: API_BASE_URL,
+});
+
+// WebSocket URL derived from API base URL
+export const WS_BASE_URL = API_BASE_URL.replace('https://', 'wss://').replace('http://', 'ws://');
 
 // Import and re-export types from generated client
 import type {

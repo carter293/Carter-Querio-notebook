@@ -72,8 +72,14 @@ export function useWebSocket(
       return; // Already connected
     }
 
+    // Import WS_BASE_URL dynamically to avoid circular dependency
+    const wsBaseUrl = (() => {
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+      return apiBaseUrl.replace('https://', 'wss://').replace('http://', 'ws://');
+    })();
+
     const websocket = new WebSocket(
-      `ws://localhost:8000/api/ws/notebooks/${notebookId}`
+      `${wsBaseUrl}/api/ws/notebooks/${notebookId}`
     );
 
     websocket.onopen = () => {

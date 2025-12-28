@@ -246,6 +246,11 @@ reactive-notebook/
 │   ├── scheduler.py         # Reactive scheduler
 │   ├── websocket.py         # WebSocket broadcaster
 │   ├── routes.py            # API endpoints
+│   ├── scripts/             # Operational scripts
+│   │   ├── deploy.sh        # Build & deploy to AWS ECS
+│   │   ├── docker-test.sh   # Test Docker image locally
+│   │   ├── health-check.sh  # Check deployed backend health
+│   │   └── update-service.sh # Force ECS service restart
 │   └── tests/
 │       ├── __init__.py
 │       ├── test_ast_parser.py
@@ -267,10 +272,28 @@ reactive-notebook/
 │   ├── tsconfig.json
 │   ├── tsconfig.node.json
 │   └── vite.config.ts
+├── terraform/               # Infrastructure as Code
+│   ├── main.tf             # Root module
+│   ├── variables.tf        # Input variables
+│   ├── outputs.tf          # Output values
+│   ├── backend.tf          # Terraform Cloud config
+│   ├── production.tfvars   # Production environment vars
+│   └── modules/            # Reusable infrastructure modules
+│       ├── networking/     # VPC, subnets, NAT gateways
+│       ├── security/       # Security groups, IAM roles
+│       ├── storage/        # ECR, S3 buckets
+│       ├── compute/        # ECS cluster, ALB
+│       └── cdn/            # CloudFront distribution
 ├── requirements.txt
 ├── pytest.ini
 └── README.md
 ```
+
+### 📂 Directory Organization
+
+**Backend Scripts**: All operational scripts are now in `backend/scripts/` for better organization. Each script automatically changes to the `/backend` directory context, so Docker and other commands work correctly regardless of where the script is invoked from.
+
+**Terraform Modules**: Infrastructure code uses a modular architecture for better reusability and maintainability. See [terraform/README.md](terraform/README.md) for details.
 
 ## Known Limitations
 
