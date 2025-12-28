@@ -13,12 +13,24 @@ import { client } from './client/client.gen';
 
 // Configure API base URL from environment variable
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
-client.setConfig({
-  baseUrl: API_BASE_URL,
-});
 
 // WebSocket URL derived from API base URL
 export const WS_BASE_URL = API_BASE_URL.replace('https://', 'wss://').replace('http://', 'ws://');
+
+// Configure client with auth token
+export function configureClientAuth(token: string | null) {
+  client.setConfig({
+    baseUrl: API_BASE_URL,
+    headers: token ? {
+      'Authorization': `Bearer ${token}`
+    } : {},
+  });
+}
+
+// Initialize client without auth (will be configured per-request)
+client.setConfig({
+  baseUrl: API_BASE_URL,
+});
 
 // Import and re-export types from generated client
 import type {
@@ -42,20 +54,32 @@ export type Output = OutputResponse;
 export type { TableData } from './client';
 
 // Helper to handle errors consistently
-function handleApiError(response: Response, operation: string): never {
-  throw new Error(`Failed to ${operation}: ${response.statusText}`);
+async function handleApiError(response: Response, operation: string): Promise<void> {
+  let errorMessage = response.statusText || 'Unknown error';
+  
+  try {
+    const errorData = await response.json();
+    if (errorData.detail) {
+      errorMessage = errorData.detail;
+    } else if (typeof errorData === 'string') {
+      errorMessage = errorData;
+    } else if (errorData.message) {
+      errorMessage = errorData.message;
+    }
+  } catch {
+    // If JSON parsing fails, use status text
+    errorMessage = response.statusText || `HTTP ${response.status}`;
+  }
+  
+  throw new Error(`Failed to ${operation}: ${errorMessage}`);
 }
 
 // Notebook operations
 export async function createNotebook(): Promise<{ notebook_id: string }> {
   const result = await createNotebookApiNotebooksPost();
   
-  if (result.error) {
-    throw new Error(`Failed to create notebook: ${result.error}`);
-  }
-  
   if (!result.response.ok) {
-    handleApiError(result.response, 'create notebook');
+    await handleApiError(result.response, 'create notebook');
   }
   
   return result.data as { notebook_id: string };
@@ -66,12 +90,8 @@ export async function getNotebook(id: string): Promise<Notebook> {
     path: { notebook_id: id },
   });
   
-  if (result.error) {
-    throw new Error(`Failed to get notebook: ${result.error}`);
-  }
-  
   if (!result.response.ok) {
-    handleApiError(result.response, 'get notebook');
+    await handleApiError(result.response, 'get notebook');
   }
   
   return result.data as Notebook;
@@ -80,12 +100,8 @@ export async function getNotebook(id: string): Promise<Notebook> {
 export async function listNotebooks(): Promise<NotebookMetadataResponse[]> {
   const result = await listNotebooksEndpointApiNotebooksGet();
   
-  if (result.error) {
-    throw new Error(`Failed to list notebooks: ${result.error}`);
-  }
-  
   if (!result.response.ok) {
-    handleApiError(result.response, 'list notebooks');
+    await handleApiError(result.response, 'list notebooks');
   }
   
   // Response is now properly typed as ListNotebooksResponse
@@ -99,12 +115,8 @@ export async function updateDbConnection(id: string, connString: string): Promis
     body: { connection_string: connString },
   });
   
-  if (result.error) {
-    throw new Error(`Failed to update DB connection: ${result.error}`);
-  }
-  
   if (!result.response.ok) {
-    handleApiError(result.response, 'update DB connection');
+    await handleApiError(result.response, 'update DB connection');
   }
 }
 
@@ -114,12 +126,8 @@ export async function renameNotebook(notebookId: string, name: string): Promise<
     body: { name },
   });
   
-  if (result.error) {
-    throw new Error(`Failed to rename notebook: ${result.error}`);
-  }
-  
   if (!result.response.ok) {
-    handleApiError(result.response, 'rename notebook');
+    await handleApiError(result.response, 'rename notebook');
   }
 }
 
@@ -130,12 +138,8 @@ export async function createCell(notebookId: string, type: 'python' | 'sql'): Pr
     body: { type },
   });
   
-  if (result.error) {
-    throw new Error(`Failed to create cell: ${result.error}`);
-  }
-  
   if (!result.response.ok) {
-    handleApiError(result.response, 'create cell');
+    await handleApiError(result.response, 'create cell');
   }
   
   return result.data as { cell_id: string };
@@ -150,12 +154,8 @@ export async function updateCell(notebookId: string, cellId: string, code: strin
     body: { code },
   });
   
-  if (result.error) {
-    throw new Error(`Failed to update cell: ${result.error}`);
-  }
-  
   if (!result.response.ok) {
-    handleApiError(result.response, 'update cell');
+    await handleApiError(result.response, 'update cell');
   }
 }
 
@@ -167,12 +167,8 @@ export async function deleteCell(notebookId: string, cellId: string): Promise<vo
     },
   });
   
-  if (result.error) {
-    throw new Error(`Failed to delete cell: ${result.error}`);
-  }
-  
   if (!result.response.ok) {
-    handleApiError(result.response, 'delete cell');
+    await handleApiError(result.response, 'delete cell');
   }
 }
 

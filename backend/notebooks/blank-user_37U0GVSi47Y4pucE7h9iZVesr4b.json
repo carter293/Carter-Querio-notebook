@@ -1,0 +1,15 @@
+{
+  "id": "blank-user_37U0GVSi47Y4pucE7h9iZVesr4b",
+  "name": "Blank Notebook",
+  "db_conn_string": null,
+  "revision": 0,
+  "cells": [
+    {
+      "id": "01c5da8b-413d-4785-a3d6-e7ee23a2ec0b",
+      "type": "python",
+      "code": "",
+      "reads": [],
+      "writes": []
+    }
+  ]
+}

@@ -18,7 +18,7 @@ class MimeType(str, Enum):
     PNG = "image/png"
     HTML = "text/html"
     PLAIN = "text/plain"
-    VEGA_LITE = "application/vnd.vegalite.v5+json"
+    VEGA_LITE = "application/vnd.vegalite.v6+json"
     JSON = "application/json"
     PLOTLY_JSON = "application/vnd.plotly.v1+json"
 
@@ -77,6 +77,7 @@ class KernelState:
 @dataclass
 class Notebook:
     id: str
+    user_id: str  # Clerk user ID (from JWT 'sub' claim)
     name: Optional[str] = None
     db_conn_string: Optional[str] = None
     cells: List[Cell] = field(default_factory=list)

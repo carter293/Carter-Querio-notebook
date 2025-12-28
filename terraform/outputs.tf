@@ -72,3 +72,8 @@ output "backend_subdomain" {
   description = "Configured backend subdomain"
   value       = var.backend_subdomain
 }
+
+output "clerk_publishable_key" {
+  description = "Clerk Publishable Key (safe to expose in frontend)"
+  value       = var.clerk_publishable_key
+}

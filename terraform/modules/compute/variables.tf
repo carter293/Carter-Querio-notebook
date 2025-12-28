@@ -84,3 +84,9 @@ variable "alb_certificate_arn" {
   default     = ""
 }
 
+variable "clerk_secret_key" {
+  description = "Clerk Secret Key for backend authentication"
+  type        = string
+  sensitive   = true
+}
+

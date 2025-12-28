@@ -76,3 +76,18 @@ variable "backend_subdomain" {
   default     = ""
 }
 
+# Clerk authentication variables
+# These should be set via environment variables:
+# export TF_VAR_clerk_secret_key="sk_live_..."
+# export TF_VAR_clerk_publishable_key="pk_live_..."
+variable "clerk_secret_key" {
+  description = "Clerk Secret Key for backend authentication (sk_live_...). Set via TF_VAR_clerk_secret_key environment variable."
+  type        = string
+  sensitive   = true
+}
+
+variable "clerk_publishable_key" {
+  description = "Clerk Publishable Key for frontend (pk_live_...). Set via TF_VAR_clerk_publishable_key environment variable."
+  type        = string
+}
+

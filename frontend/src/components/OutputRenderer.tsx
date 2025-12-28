@@ -65,7 +65,7 @@ export function OutputRenderer({ output, cellId, outputIndex }: OutputRendererPr
         />
       );
 
-    case 'application/vnd.vegalite.v5+json':
+    case 'application/vnd.vegalite.v6+json':
       if (typeof output.data === 'object' && output.data !== null) {
         return <VegaLiteRenderer spec={output.data as VisualizationSpec} />;
       }

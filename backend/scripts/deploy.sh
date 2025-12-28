@@ -25,9 +25,6 @@ echo "  Cluster:    $CLUSTER_NAME"
 echo "  Service:    $SERVICE_NAME"
 echo ""
 
-# Copy requirements temporarily (needed for Docker build)
-echo "📋 Preparing build context..."
-cp ../requirements.txt ./requirements.txt
 
 # Authenticate Docker to ECR
 # Note: If you have docker-credential-helper-ecr installed and configured,
@@ -81,8 +78,6 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
   fi
 done
 
-# Cleanup
-rm ./requirements.txt
 
 # Verify image in ECR
 echo ""

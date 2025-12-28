@@ -58,7 +58,8 @@ export function isCellOutput(msg: WSMessage): msg is Extract<WSMessage, { type: 
 
 export function useWebSocket(
   notebookId: string,
-  onMessage: (msg: WSMessage) => void
+  onMessage: (msg: WSMessage) => void,
+  token: string | null  // Add token parameter
 ) {
   const ws = useRef<WebSocket | null>(null);
   const [connected, setConnected] = useState(false);
@@ -72,14 +73,21 @@ export function useWebSocket(
       return; // Already connected
     }
 
+    // Don't connect if no token available
+    if (!token) {
+      console.warn('No authentication token available, WebSocket connection deferred');
+      return;
+    }
+
     // Import WS_BASE_URL dynamically to avoid circular dependency
     const wsBaseUrl = (() => {
       const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
       return apiBaseUrl.replace('https://', 'wss://').replace('http://', 'ws://');
     })();
 
+    // Append token as query parameter
     const websocket = new WebSocket(
-      `${wsBaseUrl}/api/ws/notebooks/${notebookId}`
+      `${wsBaseUrl}/api/ws/notebooks/${notebookId}?token=${encodeURIComponent(token)}`
     );
 
     websocket.onopen = () => {
@@ -109,9 +117,16 @@ export function useWebSocket(
       setConnected(false);
     };
 
-    websocket.onclose = () => {
-      console.log('WebSocket disconnected');
+    websocket.onclose = (event) => {
+      console.log('WebSocket disconnected', event.code, event.reason);
       setConnected(false);
+      
+      // Check if close was due to auth error (code 1008)
+      if (event.code === 1008) {
+        console.error('WebSocket authentication failed:', event.reason);
+        // Don't attempt reconnection for auth errors
+        return;
+      }
       
       // Attempt reconnection with exponential backoff
       if (reconnectAttempts.current < maxReconnectAttempts) {
@@ -126,7 +141,7 @@ export function useWebSocket(
     };
 
     ws.current = websocket;
-  }, [notebookId, onMessage]);
+  }, [notebookId, onMessage, token]);  // Add token to dependencies
 
   useEffect(() => {
     connect();

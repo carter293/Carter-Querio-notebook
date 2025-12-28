@@ -1,25 +1,41 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useAuth } from '@clerk/clerk-react';
 import { Cell } from './Cell';
 import { useWebSocket, WSMessage } from '../useWebSocket';
 import * as api from '../api-client';
+import { configureClientAuth } from '../api-client';
 
 interface NotebookProps {
   notebookId: string;
 }
 
 export function Notebook({ notebookId }: NotebookProps) {
+  const { getToken } = useAuth();
   const [notebook, setNotebook] = useState<api.Notebook | null>(null);
   const [dbConnString, setDbConnString] = useState('');
   const [loading, setLoading] = useState(true);
+  const [token, setToken] = useState<string | null>(null);
 
   // Load initial notebook
   useEffect(() => {
-    api.getNotebook(notebookId).then(nb => {
-      setNotebook(nb);
-      setDbConnString(nb.db_conn_string || '');
-      setLoading(false);
-    });
-  }, [notebookId]);
+    async function loadNotebook() {
+      try {
+        // Get auth token and configure client
+        const authToken = await getToken();
+        setToken(authToken);  // Store for WebSocket
+        configureClientAuth(authToken);
+        
+        const data = await api.getNotebook(notebookId);
+        setNotebook(data);
+        setDbConnString(data.db_conn_string || '');
+        setLoading(false);
+      } catch (error) {
+        console.error('Failed to load notebook:', error);
+        setLoading(false);
+      }
+    }
+    loadNotebook();
+  }, [notebookId, getToken]);
 
   // Handle WebSocket messages
   const handleWSMessage = useCallback((msg: WSMessage) => {
@@ -98,17 +114,27 @@ export function Notebook({ notebookId }: NotebookProps) {
     });
   }, []);
 
-  const { sendMessage, connected } = useWebSocket(notebookId, handleWSMessage);
+  const { sendMessage, connected } = useWebSocket(notebookId, handleWSMessage, token);
 
   // Re-fetch notebook on reconnection to ensure sync
   useEffect(() => {
-    if (connected && notebook) {
-      // Re-fetch to ensure we have latest state after reconnection
-      api.getNotebook(notebookId).then(nb => {
-        setNotebook(nb);
-      });
+    async function refetchNotebook() {
+      if (connected && notebook) {
+        try {
+          // Get auth token and configure client
+          const token = await getToken();
+          configureClientAuth(token);
+          
+          // Re-fetch to ensure we have latest state after reconnection
+          const nb = await api.getNotebook(notebookId);
+          setNotebook(nb);
+        } catch (error) {
+          console.error('Failed to refetch notebook:', error);
+        }
+      }
     }
-  }, [connected, notebookId]); // Only run when connection status changes
+    refetchNotebook();
+  }, [connected, notebookId, getToken]); // Only run when connection status changes
 
   const handleRunCell = (cellId: string) => {
     sendMessage({ type: 'run_cell', cellId });
@@ -116,6 +142,10 @@ export function Notebook({ notebookId }: NotebookProps) {
 
   const handleUpdateCell = async (cellId: string, code: string) => {
     try {
+      // Get auth token and configure client
+      const token = await getToken();
+      configureClientAuth(token);
+      
       // Send mutation - WebSocket will update state
       await api.updateCell(notebookId, cellId, code);
       // No GET request! WebSocket cell_updated message will update state
@@ -133,6 +163,10 @@ export function Notebook({ notebookId }: NotebookProps) {
     }
     
     try {
+      // Get auth token and configure client
+      const token = await getToken();
+      configureClientAuth(token);
+      
       // Send mutation - WebSocket will update state
       await api.deleteCell(notebookId, cellId);
       // No GET request! WebSocket cell_deleted message will update state
@@ -145,6 +179,10 @@ export function Notebook({ notebookId }: NotebookProps) {
 
   const handleAddCell = async (type: 'python' | 'sql') => {
     try {
+      // Get auth token and configure client
+      const token = await getToken();
+      configureClientAuth(token);
+      
       await api.createCell(notebookId, type);
       // WebSocket will send cell_created message
     } catch (error) {
@@ -155,8 +193,17 @@ export function Notebook({ notebookId }: NotebookProps) {
   };
 
   const handleUpdateDbConnection = async () => {
-    await api.updateDbConnection(notebookId, dbConnString);
-    alert('Database connection updated');
+    try {
+      // Get auth token and configure client
+      const token = await getToken();
+      configureClientAuth(token);
+      
+      await api.updateDbConnection(notebookId, dbConnString);
+      alert('Database connection updated');
+    } catch (error) {
+      console.error('Failed to update DB connection:', error);
+      alert('Failed to update database connection. Please try again.');
+    }
   };
 
   if (loading) {

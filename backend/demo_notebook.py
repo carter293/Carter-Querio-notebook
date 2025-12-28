@@ -1,7 +1,7 @@
 import uuid
 from models import Notebook, Cell, CellType, CellStatus
 
-def create_demo_notebook() -> Notebook:
+def create_demo_notebook(user_id: str) -> Notebook:
     cells = [
         Cell(
             id=str(uuid.uuid4()),
@@ -98,7 +98,7 @@ chart""",
         )
     ]
 
-    notebook = Notebook(id="demo", cells=cells, revision=0)
+    notebook = Notebook(id="demo", user_id=user_id, cells=cells, revision=0)
 
     from graph import rebuild_graph
     rebuild_graph(notebook)

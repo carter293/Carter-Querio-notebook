@@ -127,6 +127,10 @@ resource "aws_ecs_task_definition" "backend" {
         {
           name  = "ALLOWED_ORIGINS"
           value = var.allowed_origins
+        },
+        {
+          name  = "CLERK_SECRET_KEY"
+          value = var.clerk_secret_key
         }
       ]
 

@@ -20,7 +20,7 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
 
 /**
  * List Notebooks Endpoint
- * List all available notebooks
+ * List all notebooks for the current user
  */
 export const listNotebooksEndpointApiNotebooksGet = <ThrowOnError extends boolean = false>(options?: Options<ListNotebooksEndpointApiNotebooksGetData, ThrowOnError>) => {
     return (options?.client ?? _heyApiClient).get<ListNotebooksEndpointApiNotebooksGetResponses, unknown, ThrowOnError>({
@@ -42,7 +42,7 @@ export const createNotebookApiNotebooksPost = <ThrowOnError extends boolean = fa
 
 /**
  * Get Notebook
- * Get notebook details
+ * Get a specific notebook
  */
 export const getNotebookApiNotebooksNotebookIdGet = <ThrowOnError extends boolean = false>(options: Options<GetNotebookApiNotebooksNotebookIdGetData, ThrowOnError>) => {
     return (options.client ?? _heyApiClient).get<GetNotebookApiNotebooksNotebookIdGetResponses, GetNotebookApiNotebooksNotebookIdGetErrors, ThrowOnError>({

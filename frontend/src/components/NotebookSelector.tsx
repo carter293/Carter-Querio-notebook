@@ -86,20 +86,27 @@ export function NotebookSelector({
           <select
             value={selectedNotebookId || ''}
             onChange={(e) => {
-              if (e.target.value === '__create_new__') {
+              const value = e.target.value;
+              if (value === '__create_new__') {
                 onCreateNew();
-              } else {
-                onSelectNotebook(e.target.value);
+              } else if (value) {
+                onSelectNotebook(value);
               }
             }}
             disabled={loading}
             className="flex-full select-field"
           >
+            {/* Default option when no notebook selected */}
+            <option value="">
+              {loading ? 'Loading notebooks...' : 'Choose a notebook'}
+            </option>
+            
             {notebooks.map(nb => (
               <option key={nb.id} value={nb.id}>
-                {nb.name}
+                {nb.name || nb.id}
               </option>
             ))}
+            
             <option value="__create_new__" className="italic">
               + Create New Notebook
             </option>

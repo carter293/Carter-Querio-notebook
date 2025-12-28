@@ -42,11 +42,21 @@ else
 fi
 
 cd ../frontend
+
+# Get Clerk publishable key from environment variable
+if [ -z "$CLERK_PUBLISHABLE_KEY" ]; then
+  echo "ERROR: CLERK_PUBLISHABLE_KEY environment variable not set"
+  echo "Set it as environment variable: export CLERK_PUBLISHABLE_KEY=pk_live_..."
+  exit 1
+fi
+
 cat > .env.production << EOF
 VITE_API_BASE_URL=$API_URL
+VITE_CLERK_PUBLISHABLE_KEY=$CLERK_PUBLISHABLE_KEY
 EOF
 
 echo "API Base URL: $API_URL"
+echo "Clerk Publishable Key: ${CLERK_PUBLISHABLE_KEY:0:20}..." # Show first 20 chars
 
 # Build frontend
 echo "Building frontend..."
