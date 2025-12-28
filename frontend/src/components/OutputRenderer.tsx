@@ -173,14 +173,30 @@ function PlotlyRenderer({ spec, cellId, outputIndex }: PlotlyRendererProps) {
     ? `${cellId}-${outputIndex}-${JSON.stringify(spec.data).slice(0, 100)}`
     : `plot-${JSON.stringify(spec.data).slice(0, 100)}`;
 
+  // Use user-provided dimensions or defaults
+  // Fixed dimensions prevent Plotly's .svg-container from collapsing to height: 100%
+  // during React re-renders, which causes DOM shifting
+  const height = spec.layout?.height || 500;
+
+  const layout = {
+    ...spec.layout,
+    height,
+  };
+
   return (
-    <Plot
-      key={plotKey}
-      data={spec.data}
-      layout={spec.layout || {}}
-      config={spec.config || { responsive: true, displayModeBar: true }}
-      style={{ width: '100%' }}
-      useResizeHandler={true}
-    />
+    <div style={{ minHeight: `${height}px`, width: '100%' }}>
+      <Plot
+        key={plotKey}
+        data={spec.data}
+        layout={layout}
+        config={{ 
+          autosizable: true,
+          responsive: true,
+          displayModeBar: true 
+        }}
+        style={{ width: '100%' }}
+        useResizeHandler={true}
+      />
+    </div>
   );
 }
