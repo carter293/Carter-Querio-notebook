@@ -53,20 +53,8 @@ export function NotebookSelector({
   };
 
   return (
-    <div style={{
-      display: 'flex',
-      gap: '8px',
-      alignItems: 'center',
-      marginBottom: '24px',
-      padding: '12px',
-      backgroundColor: '#f9fafb',
-      borderRadius: '8px'
-    }}>
-      <label style={{
-        fontSize: '14px',
-        fontWeight: 500,
-        whiteSpace: 'nowrap'
-      }}>
+    <div className="card-section-sm flex-row-center">
+      <label className="text-label whitespace-nowrap">
         Notebook:
       </label>
       {isRenaming ? (
@@ -77,42 +65,18 @@ export function NotebookSelector({
             onChange={(e) => setRenameValue(e.target.value)}
             onKeyDown={handleKeyDown}
             autoFocus
-            style={{
-              flex: 1,
-              padding: '8px 12px',
-              border: '1px solid #3b82f6',
-              borderRadius: '4px',
-              fontSize: '14px',
-              backgroundColor: 'white'
-            }}
+            className="flex-full input-field-active"
           />
           <button
             onClick={handleSaveRename}
             disabled={!renameValue.trim()}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: '#3b82f6',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              fontSize: '14px',
-              cursor: renameValue.trim() ? 'pointer' : 'not-allowed',
-              opacity: renameValue.trim() ? 1 : 0.5
-            }}
+            className="btn-primary"
           >
             Save
           </button>
           <button
             onClick={handleCancelRename}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: '#6b7280',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              fontSize: '14px',
-              cursor: 'pointer'
-            }}
+            className="btn-secondary"
           >
             Cancel
           </button>
@@ -129,22 +93,14 @@ export function NotebookSelector({
               }
             }}
             disabled={loading}
-            style={{
-              flex: 1,
-              padding: '8px 12px',
-              border: '1px solid #d1d5db',
-              borderRadius: '4px',
-              fontSize: '14px',
-              backgroundColor: loading ? '#f3f4f6' : 'white',
-              cursor: loading ? 'not-allowed' : 'pointer'
-            }}
+            className="flex-full select-field"
           >
             {notebooks.map(nb => (
               <option key={nb.id} value={nb.id}>
                 {nb.name}
               </option>
             ))}
-            <option value="__create_new__" style={{ fontStyle: 'italic' }}>
+            <option value="__create_new__" className="italic">
               + Create New Notebook
             </option>
           </select>
@@ -152,18 +108,7 @@ export function NotebookSelector({
             <button
               onClick={handleStartRename}
               title="Rename notebook"
-              style={{
-                padding: '8px 12px',
-                backgroundColor: '#f3f4f6',
-                color: '#374151',
-                border: '1px solid #d1d5db',
-                borderRadius: '4px',
-                fontSize: '14px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px'
-              }}
+              className="btn-icon"
             >
               <svg
                 width="16"
@@ -182,7 +127,7 @@ export function NotebookSelector({
             </button>
           )}
           {loading && (
-            <span style={{ fontSize: '12px', color: '#6b7280' }}>
+            <span className="text-helper">
               Loading...
             </span>
           )}

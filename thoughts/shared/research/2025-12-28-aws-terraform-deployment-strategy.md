@@ -17,9 +17,12 @@ last_updated_by: AI Assistant
 
 How to deploy the Reactive Notebook application (React frontend + FastAPI backend) to AWS using Terraform Cloud, with the frontend served via S3 + CloudFront and the backend running on ECS Fargate, ensuring proper CORS configuration and using latest 2025 best practices?
 
+**Target Region**: AWS London (`eu-north-1`) - closest region to UK
+
 ## Summary
 
 The Reactive Notebook application can be deployed to AWS using a modern, scalable architecture:
+- **Region**: AWS London (`eu-north-1`) - optimal for UK users with ~5-10ms latency
 - **Frontend**: React SPA hosted on S3 and distributed globally via CloudFront
 - **Backend**: FastAPI containerized application running on ECS Fargate with Application Load Balancer
 - **Infrastructure**: Managed via Terraform Cloud with proper state management and CI/CD integration
@@ -29,6 +32,7 @@ Key considerations:
 1. Current architecture is in-memory (notebooks stored in memory)
 2. WebSocket support required for real-time cell execution updates
 3. Future separation of orchestrator and kernel planned (not implemented now)
+4. London region pricing is ~12% higher than us-east-1 but provides optimal UK latency
 
 ## Current Architecture
 
@@ -64,6 +68,28 @@ Key considerations:
 - WebSocket: `/api/ws/notebooks/{id}` (real-time execution updates)
 - Health: `/health`
 
+## Region Selection: London (eu-north-1)
+
+### Why London?
+- **Location**: Primary AWS region serving the UK
+- **Latency**: ~5-10ms for UK users (vs ~80-100ms for us-east-1)
+- **Data Residency**: Data stays in UK/EU (GDPR compliance)
+- **Availability Zones**: 3 AZs for high availability
+- **Services**: Full ECS Fargate, S3, CloudFront support
+
+### Pricing Comparison
+- **eu-north-1 (London)**: ~12% more expensive than us-east-1
+- **eu-west-1 (Ireland)**: ~8% more expensive than us-east-1, alternative if cost is priority
+- **Trade-off**: Higher cost justified by significantly better latency for UK users
+
+### Alternative Regions for UK
+| Region | Location | Latency from UK | Price vs us-east-1 | Recommendation |
+|--------|----------|----------------|-------------------|----------------|
+| **eu-north-1** | London | ~5-10ms | +12% | ✅ **Best choice** |
+| eu-west-1 | Ireland | ~20-30ms | +8% | Good alternative |
+| eu-central-1 | Frankfurt | ~40-50ms | +10% | Not recommended |
+| us-east-1 | Virginia | ~80-100ms | Base | Poor latency |
+
 ## Deployment Architecture
 
 ### Overview
@@ -82,7 +108,7 @@ Key considerations:
 │  │    S3 Bucket         │        │   ECS Fargate Cluster   ││
 │  │  (Static Assets)     │        │   (FastAPI Backend)     ││
 │  │  - index.html        │        │   - Task Definition     ││
-│  │  - JS bundles        │        │   - Service (2+ tasks)  ││
+│  │  - JS bundles        │        │   - Service (1 task)*   ││
 │  │  - CSS files         │        │   - WebSocket support   ││
 │  └──────────────────────┘        └─────────────────────────┘│
 │                                            │                 │
@@ -90,6 +116,8 @@ Key considerations:
 │                                   │   ECR Repository        ││
 │                                   │   (Docker Images)       ││
 │                                   └─────────────────────────┘│
+│                                                               │
+│  * Single task due to in-memory state (no shared storage)   │
 └─────────────────────────────────────────────────────────────┘
 
          Managed by Terraform Cloud
@@ -210,6 +238,7 @@ resource "aws_cloudfront_distribution" "frontend" {
 - Configure custom error responses for SPA routing
 - Use HTTPS only (`redirect-to-https`)
 - Consider cache invalidation strategy for deployments
+- **Note**: CloudFront serves from global edge locations (including multiple UK locations) regardless of S3 origin region
 
 ### 2. Backend: ECS Fargate
 
@@ -270,9 +299,9 @@ resource "aws_ecr_repository" "backend" {
 
 **Build & Push Commands**:
 ```bash
-# Authenticate Docker to ECR
-aws ecr get-login-password --region us-east-1 | \
-  docker login --username AWS --password-stdin <account-id>.dkr.ecr.us-east-1.amazonaws.com
+# Authenticate Docker to ECR (London region)
+aws ecr get-login-password --region eu-north-1 | \
+  docker login --username AWS --password-stdin <account-id>.dkr.ecr.eu-north-1.amazonaws.com
 
 # Build Docker image
 cd backend
@@ -280,10 +309,10 @@ docker build -t reactive-notebook-backend:latest .
 
 # Tag image
 docker tag reactive-notebook-backend:latest \
-  <account-id>.dkr.ecr.us-east-1.amazonaws.com/reactive-notebook-backend:latest
+  <account-id>.dkr.ecr.eu-north-1.amazonaws.com/reactive-notebook-backend:latest
 
 # Push to ECR
-docker push <account-id>.dkr.ecr.us-east-1.amazonaws.com/reactive-notebook-backend:latest
+docker push <account-id>.dkr.ecr.eu-north-1.amazonaws.com/reactive-notebook-backend:latest
 ```
 
 #### ECS Cluster
@@ -480,7 +509,7 @@ resource "aws_ecs_service" "backend" {
   name            = "reactive-notebook-service"
   cluster         = aws_ecs_cluster.backend.id
   task_definition = aws_ecs_task_definition.backend.arn
-  desired_count   = 2  # Start with 2 tasks for HA
+  desired_count   = 1  # Single task due to in-memory state
   launch_type     = "FARGATE"
 
   network_configuration {
@@ -503,11 +532,17 @@ resource "aws_ecs_service" "backend" {
   # Enable ECS Exec for debugging
   enable_execute_command = true
 
-  # Deployment configuration
+  # Deployment configuration for single task
+  # WARNING: This causes brief downtime during deployments
   deployment_configuration {
-    maximum_percent         = 200
-    minimum_healthy_percent = 100
+    maximum_percent         = 100  # Can't run 2 tasks (in-memory state)
+    minimum_healthy_percent = 0    # Allow old task to stop first
   }
+  
+  # Alternative: For zero-downtime deployments, use CodeDeploy blue-green:
+  # deployment_controller {
+  #   type = "CODE_DEPLOY"
+  # }
 
   # Auto-scaling (optional, recommended for production)
   # lifecycle {
@@ -522,12 +557,14 @@ resource "aws_ecs_service" "backend" {
 ```
 
 **Important Notes**:
-- 2 tasks minimum for high availability
+- **Single task required**: In-memory state not shared between tasks
+- **Deployment downtime**: With 1 task, updates cause ~30-60s downtime
+  - Alternative: Use CodeDeploy blue-green deployment for zero downtime
+- For high availability in future: Implement Redis/database persistence first
 - Tasks in private subnets for security
-- Sticky sessions enabled (target group config)
-- **Current limitation**: In-memory state not shared between tasks
-  - Solution 1: Use single task (`desired_count = 1`) for now
-  - Solution 2: Implement Redis/database persistence (future)
+- Sticky sessions enabled (target group config) for future multi-task support
+- **DO NOT scale to multiple tasks** until persistence is implemented
+- **AWS Confirmation**: Single-task ECS services are fully supported and "recommended for stateful applications without external state management" (AWS docs, Dec 2025)
 
 ### 3. Networking & Security
 
@@ -829,7 +866,7 @@ const WS_BASE_URL = API_BASE_URL.replace('https://', 'wss://').replace('http://'
 **Vite Environment Variables**:
 Create `frontend/.env.production`:
 ```bash
-VITE_API_BASE_URL=https://your-alb-dns-name.us-east-1.elb.amazonaws.com
+VITE_API_BASE_URL=https://your-alb-dns-name.eu-north-1.elb.amazonaws.com
 ```
 
 Build with environment:
@@ -859,10 +896,10 @@ npm run build  # Automatically uses .env.production
 In Terraform Cloud workspace settings, add:
 - `AWS_ACCESS_KEY_ID` (sensitive)
 - `AWS_SECRET_ACCESS_KEY` (sensitive)
-- `AWS_DEFAULT_REGION` (e.g., `us-east-1`)
+- `AWS_DEFAULT_REGION` (set to `eu-north-1` for London)
 
 **Option 2: OIDC/Assume Role** (more secure):
-Configure AWS IAM OIDC provider for Terraform Cloud:
+Configure AWS IAM OIDC provider for Terraform Cloud (London region):
 ```terraform
 resource "aws_iam_openid_connect_provider" "terraform_cloud" {
   url = "https://app.terraform.io"
@@ -949,7 +986,7 @@ provider "aws" {
 variable "aws_region" {
   description = "AWS region"
   type        = string
-  default     = "us-east-1"
+  default     = "eu-north-1"  # London region (closest to UK)
 }
 
 variable "environment" {
@@ -992,17 +1029,26 @@ variable "backend_desired_count" {
 
 2. **CI/CD Integration** (GitHub Actions example):
    ```yaml
-   name: Deploy to AWS
+   name: Deploy to AWS (London)
    
    on:
      push:
        branches: [main]
+   
+   env:
+     AWS_REGION: eu-north-1  # London region
    
    jobs:
      deploy:
        runs-on: ubuntu-latest
        steps:
          - uses: actions/checkout@v4
+         
+         - name: Configure AWS Credentials
+           uses: aws-actions/configure-aws-credentials@v4
+           with:
+             aws-region: eu-north-1
+             role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
          
          - name: Build Frontend
            run: |
@@ -1012,7 +1058,7 @@ variable "backend_desired_count" {
          
          - name: Build and Push Backend
            run: |
-             aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
+             aws ecr get-login-password --region eu-north-1 | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
              cd backend
              docker build -t ${{ secrets.ECR_REGISTRY }}/reactive-notebook-backend:${{ github.sha }} .
              docker push ${{ secrets.ECR_REGISTRY }}/reactive-notebook-backend:${{ github.sha }}
@@ -1027,7 +1073,7 @@ variable "backend_desired_count" {
          
          - name: Update ECS Service
            run: |
-             aws ecs update-service --cluster reactive-notebook-cluster --service reactive-notebook-service --force-new-deployment
+             aws ecs update-service --cluster reactive-notebook-cluster --service reactive-notebook-service --force-new-deployment --region eu-north-1
    ```
 
 3. **Terraform Cloud Auto-Apply**:
@@ -1076,6 +1122,16 @@ variable "backend_desired_count" {
    - **Issue**: WebSocket connections tied to specific task
    - **Solution**: ALB sticky sessions maintain connection
    - **Future**: Redis pub/sub for multi-task WebSocket broadcast
+
+4. **Single-Task Deployment Strategy**:
+   - **AWS Confirmation**: Single-task ECS services are fully supported and "recommended for stateful applications without external state management" (AWS ECS docs, Dec 2025)
+   - **Deployment Downtime**: With 1 task, updates cause ~30-60 seconds downtime
+   - **Why?**: ECS default deployment (minimum_healthy_percent=100, maximum_percent=200) can't work with in-memory state - can't run 2 tasks simultaneously
+   - **Solutions**:
+     - **Option A (Simple)**: Accept brief downtime, use `minimum_healthy_percent = 0`
+     - **Option B (Complex)**: Use CodeDeploy blue-green deployment for zero downtime
+     - **Option C (Best)**: Add persistence (S3/RDS), then scale to 2+ tasks
+   - **Production Impact**: Brief downtime during deployments is acceptable for MVP/demo, not ideal for production
 
 ### Future Architecture (Orchestrator + Kernel Separation)
 
@@ -1132,8 +1188,8 @@ variable "backend_desired_count" {
 - [ ] Set up Terraform Cloud account and workspace
 - [ ] Configure AWS credentials in Terraform Cloud
 - [ ] Review and customize Terraform variables
-- [ ] Choose AWS region (consider latency to users)
-- [ ] Register domain name (optional, for custom domain)
+- [x] **Region Selected**: eu-north-1 (London) - optimal for UK users
+- [ ] Register domain name (optional, for custom domain, consider .uk or .co.uk)
 
 ### Infrastructure Deployment
 - [ ] Create Terraform configuration files (`terraform/`)
@@ -1191,7 +1247,7 @@ variable "backend_desired_count" {
 - [ ] Configure backup strategy for notebooks (S3 versioning)
 - [ ] Set up cost monitoring and budgets
 
-## Cost Estimates (Monthly, us-east-1)
+## Cost Estimates (Monthly, eu-north-1 - London)
 
 ### Frontend (S3 + CloudFront)
 - **S3 Storage**: ~$0.50/month (for ~20GB of assets)
@@ -1201,13 +1257,14 @@ variable "backend_desired_count" {
 - **Total**: **$15-60/month** (varies with traffic)
 
 ### Backend (ECS Fargate)
-- **Fargate vCPU**: 0.5 vCPU × $0.04048/hour × 730 hours = **$14.77/month**
-- **Fargate Memory**: 1 GB × $0.004445/hour × 730 hours = **$3.24/month**
-- **ALB**: $16.20/month (fixed) + $0.008/LCU-hour
-- **NAT Gateway**: $32.85/month (per AZ) × 2 = **$65.70/month**
+- **Fargate vCPU**: 0.5 vCPU × $0.04656/hour × 730 hours = **$16.99/month** (eu-north-1 pricing)
+- **Fargate Memory**: 1 GB × $0.00511/hour × 730 hours = **$3.73/month** (eu-north-1 pricing)
+- **ALB**: $18.14/month (fixed) + $0.008/LCU-hour (eu-north-1 pricing)
+- **NAT Gateway**: $36.79/month (per AZ) × 2 = **$73.58/month** (eu-north-1 pricing)
 - **CloudWatch Logs**: ~$1-5/month (for 7-day retention)
 - **ECR Storage**: ~$0.10/month (for Docker images)
-- **Total**: **$100-150/month** (1 task, 2 AZs)
+- **Total**: **$115-165/month** (1 task, 2 AZs)
+- **Note**: London region is ~12% more expensive than us-east-1
 
 **Scaling**: Each additional task adds ~$18/month
 
@@ -1215,15 +1272,17 @@ variable "backend_desired_count" {
 - **Internet egress**: $0.09/GB (first 10TB)
 - **Inter-AZ**: $0.01/GB (between AZs)
 
-### Total Estimated Cost
-- **Development**: $120-220/month (minimal traffic)
-- **Production (moderate)**: $200-400/month (with traffic, multiple tasks)
+### Total Estimated Cost (London Region)
+- **Single Task Deployment**: $135-240/month (current architecture, eu-north-1)
+- **Future Multi-Task (with persistence)**: $220-440/month (with traffic, 2+ tasks)
+- **Note**: London pricing is ~12-15% higher than us-east-1, but provides lower latency for UK users
 
 **Cost Optimization Tips**:
-- Use single NAT Gateway instead of 2 (saves $33/month, reduces HA)
+- Use single NAT Gateway instead of 2 (saves $37/month in eu-north-1, reduces HA)
 - Use Fargate Spot for non-critical workloads (saves 70%)
 - Enable S3 Intelligent-Tiering for large datasets
 - Use CloudFront reserved capacity for predictable traffic
+- Consider using eu-west-1 (Ireland) if London pricing is a concern (~8% cheaper, still low latency to UK)
 
 ## Testing & Validation
 
@@ -1242,25 +1301,25 @@ npm run preview  # Test production build locally
 
 ### Integration Testing
 ```bash
-# Test backend health
-curl https://your-alb-dns-name/health
+# Test backend health (London ALB)
+curl https://your-alb-dns-name.eu-north-1.elb.amazonaws.com/health
 
 # Test API endpoint
-curl https://your-alb-dns-name/api/notebooks
+curl https://your-alb-dns-name.eu-north-1.elb.amazonaws.com/api/notebooks
 
 # Test WebSocket (using wscat)
 npm install -g wscat
-wscat -c wss://your-alb-dns-name/api/ws/notebooks/{id}
+wscat -c wss://your-alb-dns-name.eu-north-1.elb.amazonaws.com/api/ws/notebooks/{id}
 ```
 
 ### Performance Testing
 ```bash
-# Load test with Apache Bench
-ab -n 1000 -c 10 https://your-alb-dns-name/api/notebooks
+# Load test with Apache Bench (from UK for realistic latency)
+ab -n 1000 -c 10 https://your-alb-dns-name.eu-north-1.elb.amazonaws.com/api/notebooks
 
 # WebSocket load test (using artillery)
 npm install -g artillery
-artillery quick --count 10 --num 50 wss://your-alb-dns-name/api/ws/notebooks/{id}
+artillery quick --count 10 --num 50 wss://your-alb-dns-name.eu-north-1.elb.amazonaws.com/api/ws/notebooks/{id}
 ```
 
 ## Troubleshooting

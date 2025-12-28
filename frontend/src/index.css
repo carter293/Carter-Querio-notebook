@@ -1,28 +1,449 @@
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  background-color: #f3f4f6;
-}
-
-code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
-}
-
-@keyframes pulse {
-  0%, 100% {
-    opacity: 1;
+@layer base {
+  /* CSS Custom Properties for Theme Colors */
+  :root {
+    /* Surface colors */
+    --color-surface: 255 255 255; /* white */
+    --color-surface-elevated: 248 250 252; /* slate-50 */
+    --color-surface-secondary: 249 250 251; /* gray-50 */
+    
+    /* Primary colors */
+    --color-primary: 37 99 235; /* blue-600 */
+    --color-primary-hover: 29 78 216; /* blue-700 */
+    
+    /* Success colors */
+    --color-success: 5 150 105; /* emerald-600 */
+    --color-success-hover: 4 120 87; /* emerald-700 */
+    
+    /* Error colors */
+    --color-error: 220 38 38; /* red-600 */
+    --color-error-hover: 185 28 28; /* red-700 */
+    
+    /* Warning colors */
+    --color-warning: 245 158 11; /* amber-500 */
+    --color-warning-hover: 217 119 6; /* amber-600 */
+    
+    /* Secondary/neutral colors */
+    --color-secondary: 75 85 99; /* gray-600 */
+    --color-secondary-hover: 55 65 81; /* gray-700 */
+    
+    /* Status indicator colors */
+    --color-status-idle: 156 163 175; /* gray-400 */
+    --color-status-running: 59 130 246; /* blue-500 */
+    --color-status-success: 16 185 129; /* emerald-500 */
+    --color-status-error: 239 68 68; /* red-500 */
+    --color-status-blocked: 245 158 11; /* amber-500 */
+    
+    /* Text colors */
+    --color-text-primary: 17 24 39; /* gray-900 */
+    --color-text-secondary: 107 114 128; /* gray-500 */
+    --color-text-tertiary: 156 163 175; /* gray-400 */
+    
+    /* Border colors */
+    --color-border: 209 213 219; /* gray-300 */
+    --color-border-focus: 59 130 246; /* blue-500 */
+    
+    /* Background colors for outputs */
+    --color-bg-output: 243 244 246; /* gray-100 */
+    --color-bg-error: 254 242 242; /* red-50 */
+    --color-bg-warning: 255 251 235; /* amber-50 */
+    --color-bg-info: 239 246 255; /* blue-50 */
+    
+    /* Table colors */
+    --color-table-header: 229 231 235; /* gray-200 */
+    --color-table-hover: 243 244 246; /* gray-100 */
   }
-  50% {
-    opacity: 0.5;
+
+  .dark {
+    /* Surface colors */
+    --color-surface: 15 23 42; /* slate-900 */
+    --color-surface-elevated: 30 41 59; /* slate-800 */
+    --color-surface-secondary: 17 24 39; /* gray-900 */
+    
+    /* Primary colors - lighter for visibility */
+    --color-primary: 59 130 246; /* blue-500 */
+    --color-primary-hover: 96 165 250; /* blue-400 */
+    
+    /* Success colors - lighter for visibility */
+    --color-success: 16 185 129; /* emerald-500 */
+    --color-success-hover: 52 211 153; /* emerald-400 */
+    
+    /* Error colors - lighter for visibility */
+    --color-error: 239 68 68; /* red-500 */
+    --color-error-hover: 248 113 113; /* red-400 */
+    
+    /* Warning colors - lighter for visibility */
+    --color-warning: 251 191 36; /* amber-400 */
+    --color-warning-hover: 252 211 77; /* amber-300 */
+    
+    /* Secondary/neutral colors */
+    --color-secondary: 107 114 128; /* gray-500 */
+    --color-secondary-hover: 156 163 175; /* gray-400 */
+    
+    /* Status indicator colors - lighter for dark mode */
+    --color-status-idle: 107 114 128; /* gray-500 */
+    --color-status-running: 96 165 250; /* blue-400 */
+    --color-status-success: 52 211 153; /* emerald-400 */
+    --color-status-error: 248 113 113; /* red-400 */
+    --color-status-blocked: 251 191 36; /* amber-400 */
+    
+    /* Text colors */
+    --color-text-primary: 241 245 249; /* slate-100 */
+    --color-text-secondary: 148 163 184; /* slate-400 */
+    --color-text-tertiary: 100 116 139; /* slate-500 */
+    
+    /* Border colors */
+    --color-border: 55 65 81; /* gray-700 */
+    --color-border-focus: 96 165 250; /* blue-400 */
+    
+    /* Background colors for outputs */
+    --color-bg-output: 17 24 39; /* gray-900 */
+    --color-bg-error: 127 29 29; /* red-950 */
+    --color-bg-warning: 69 26 3; /* amber-950 */
+    --color-bg-info: 23 37 84; /* blue-950 */
+    
+    /* Table colors */
+    --color-table-header: 55 65 81; /* gray-700 */
+    --color-table-hover: 31 41 55; /* gray-800 */
+  }
+
+  /* Base element styles */
+  html {
+    background-color: rgb(var(--color-bg-output));
+  }
+  
+  body {
+    background-color: rgb(var(--color-bg-output));
+    color: rgb(var(--color-text-primary));
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+      'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+      sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  
+  code {
+    font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+      monospace;
+  }
+  
+  /* Optimized transitions - only for color properties */
+  * {
+    transition-property: color, background-color, border-color, 
+                         text-decoration-color, fill, stroke;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 200ms;
+  }
+
+  /* Optimize elements that will change during theme toggle */
+  [class*="bg-"], [class*="text-"], [class*="border-"] {
+    will-change: background-color, color, border-color;
+  }
+
+  /* Respect reduced motion preference */
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      transition-duration: 0ms !important;
+      animation-duration: 0ms !important;
+    }
+  }
+}
+
+/* Preserve existing pulse animation for status indicators */
+@layer utilities {
+  @keyframes pulse {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.5;
+    }
+  }
+}
+
+@layer components {
+  /* ============================================
+     BUTTON COMPONENTS
+     ============================================ */
+  
+  /* Base button styles */
+  .btn {
+    @apply px-4 py-2 rounded text-sm font-medium transition-colors;
+    @apply focus:outline-none focus:ring-2 focus:ring-offset-2;
+  }
+  
+  .btn-sm {
+    @apply px-3 py-1.5 text-sm;
+  }
+  
+  /* Primary action button (blue) */
+  .btn-primary {
+    @apply btn bg-primary hover:bg-primary-hover text-white;
+    @apply focus:ring-primary;
+  }
+  
+  .btn-primary-sm {
+    @apply btn-primary btn-sm;
+  }
+  
+  /* Success/update button (green) */
+  .btn-success {
+    @apply btn bg-success hover:bg-success-hover text-white;
+    @apply focus:ring-success;
+  }
+  
+  /* Danger/destructive button (red) */
+  .btn-danger {
+    @apply btn bg-error hover:bg-error-hover text-white;
+    @apply focus:ring-error;
+  }
+  
+  .btn-danger-sm {
+    @apply btn-danger btn-sm;
+  }
+  
+  /* Secondary/cancel button (gray) */
+  .btn-secondary {
+    @apply btn bg-secondary hover:bg-secondary-hover text-white;
+    @apply focus:ring-secondary;
+  }
+  
+  /* Tertiary/outline button */
+  .btn-tertiary {
+    @apply btn bg-surface-elevated hover:bg-table-hover;
+    @apply text-text-secondary border border-border;
+    @apply focus:ring-border-focus;
+  }
+  
+  /* Icon button (for rename, etc.) */
+  .btn-icon {
+    @apply px-3 py-2 rounded text-sm cursor-pointer flex items-center gap-1;
+    @apply bg-surface-elevated hover:bg-table-hover transition-colors;
+    @apply text-text-secondary border border-border;
+    @apply focus:outline-none focus:ring-2 focus:ring-border-focus;
+  }
+  
+  /* Disabled state for all buttons */
+  .btn:disabled,
+  .btn-primary:disabled,
+  .btn-success:disabled,
+  .btn-danger:disabled,
+  .btn-secondary:disabled {
+    @apply opacity-50 cursor-not-allowed;
+  }
+  
+  /* Theme toggle button */
+  .btn-theme-toggle {
+    @apply px-3 py-2 rounded-lg text-sm font-medium transition-colors;
+    @apply bg-surface-elevated hover:bg-table-hover;
+    @apply focus:outline-none focus:ring-2 focus:ring-border-focus;
+  }
+  
+  /* ============================================
+     CARD COMPONENTS
+     ============================================ */
+  
+  /* Base card */
+  .card {
+    @apply bg-surface border border-border rounded-lg shadow-sm;
+  }
+  
+  /* Cell card (main container) */
+  .card-cell {
+    @apply card p-4 mb-4;
+  }
+  
+  /* Section card (DB connection, selector, etc.) */
+  .card-section {
+    @apply bg-surface-secondary rounded-lg p-4 mb-6;
+  }
+  
+  .card-section-sm {
+    @apply bg-surface-secondary rounded-lg p-3 mb-6;
+  }
+  
+  /* Info/instructions card */
+  .card-info {
+    @apply bg-output-info rounded-lg p-4 text-sm;
+    @apply text-blue-900 dark:text-blue-100;
+  }
+  
+  /* ============================================
+     INPUT COMPONENTS
+     ============================================ */
+  
+  /* Base input field */
+  .input-field {
+    @apply px-3 py-2 border border-border rounded text-sm;
+    @apply bg-surface text-text-primary;
+    @apply placeholder-text-tertiary;
+    @apply focus:outline-none focus:ring-2 focus:ring-border-focus focus:border-border-focus;
+    @apply disabled:bg-surface-elevated disabled:cursor-not-allowed;
+  }
+  
+  /* Input with active/focus state (blue border) */
+  .input-field-active {
+    @apply input-field border-border-focus;
+  }
+  
+  /* Select dropdown */
+  .select-field {
+    @apply input-field;
+  }
+  
+  /* ============================================
+     STATUS INDICATOR COMPONENTS
+     ============================================ */
+  
+  /* Status dot base */
+  .status-dot {
+    @apply w-3 h-3 rounded-full transition-colors;
+  }
+  
+  /* Status dot variants */
+  .status-dot-idle {
+    @apply status-dot bg-status-idle;
+  }
+  
+  .status-dot-running {
+    @apply status-dot bg-status-running animate-pulse-slow;
+  }
+  
+  .status-dot-success {
+    @apply status-dot bg-status-success;
+  }
+  
+  .status-dot-error {
+    @apply status-dot bg-status-error;
+  }
+  
+  .status-dot-blocked {
+    @apply status-dot bg-status-blocked;
+  }
+  
+  /* ============================================
+     OUTPUT COMPONENTS
+     ============================================ */
+  
+  /* Code editor container */
+  .editor-container {
+    @apply border border-border rounded;
+  }
+  
+  /* Output block (stdout, generic output) */
+  .output-block {
+    @apply bg-output p-2 rounded mt-2;
+  }
+  
+  /* Stdout/stderr pre block */
+  .output-pre {
+    @apply output-block text-text-primary text-xs overflow-auto whitespace-pre-wrap;
+  }
+  
+  /* Error output */
+  .output-error {
+    @apply bg-output-error p-2 rounded text-xs overflow-auto mt-2;
+    @apply text-red-900 dark:text-red-200;
+  }
+  
+  /* Warning/blocked output */
+  .output-warning {
+    @apply bg-output-warning p-2 rounded text-xs mt-2;
+    @apply text-amber-900 dark:text-amber-200;
+  }
+  
+  /* JSON output */
+  .output-json {
+    @apply output-pre;
+  }
+  
+  /* ============================================
+     TABLE COMPONENTS
+     ============================================ */
+  
+  /* Table container */
+  .table-container {
+    @apply overflow-auto max-h-96;
+  }
+  
+  /* Table base */
+  .table {
+    @apply min-w-full border-collapse border border-border text-sm;
+  }
+  
+  /* Table header */
+  .table-header {
+    @apply bg-table-header;
+  }
+  
+  /* Table header cell */
+  .table-th {
+    @apply border border-border px-3 py-2 text-left font-medium text-text-primary;
+  }
+  
+  /* Table data cell */
+  .table-td {
+    @apply border border-border px-3 py-2 text-text-primary;
+  }
+  
+  /* Table row with hover */
+  .table-row-hover {
+    @apply hover:bg-table-hover transition-colors;
+  }
+  
+  /* ============================================
+     TEXT COMPONENTS
+     ============================================ */
+  
+  /* Heading/label text */
+  .text-label {
+    @apply text-sm font-medium text-text-primary;
+  }
+  
+  /* Block label (with margin) */
+  .label {
+    @apply block text-label mb-2;
+  }
+  
+  /* Secondary/helper text */
+  .text-helper {
+    @apply text-xs text-text-secondary;
+  }
+  
+  /* Error text */
+  .text-error {
+    color: rgb(var(--color-error));
+  }
+  
+  /* Null value in tables */
+  .text-null {
+    @apply text-text-tertiary italic;
+  }
+  
+  /* ============================================
+     LAYOUT COMPONENTS
+     ============================================ */
+  
+  /* Flex row with gap */
+  .flex-row-gap {
+    @apply flex gap-2;
+  }
+  
+  /* Flex row with items centered */
+  .flex-row-center {
+    @apply flex items-center gap-2;
+  }
+  
+  /* Flex row with space between */
+  .flex-row-between {
+    @apply flex items-center justify-between;
+  }
+  
+  /* Full width flex */
+  .flex-full {
+    @apply flex-1;
   }
 }

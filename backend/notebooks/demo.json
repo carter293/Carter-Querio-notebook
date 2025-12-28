@@ -2,12 +2,12 @@
   "id": "demo",
   "name": null,
   "db_conn_string": null,
-  "revision": 83,
+  "revision": 88,
   "cells": [
     {
       "id": "c1341f53-02f8-469c-84d9-0f1cf9321843",
       "type": "python",
-      "code": "import time \n\nx = 3 + 1  # Upstream variable",
+      "code": "import time \n\nx = 10 + 1  # Upstream variable",
       "reads": [],
       "writes": [
         "x",
@@ -17,9 +17,10 @@
     {
       "id": "2b7d76d2-935e-4a24-98e2-dbb61a1098bf",
       "type": "python",
-      "code": "y = x + 5  # Depends on x",
+      "code": "time.sleep(2)\ny = x + 5  # Depends on x",
       "reads": [
-        "x"
+        "x",
+        "time"
       ],
       "writes": [
         "y"

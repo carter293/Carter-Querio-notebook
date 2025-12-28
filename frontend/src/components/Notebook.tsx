@@ -160,61 +160,39 @@ export function Notebook({ notebookId }: NotebookProps) {
   };
 
   if (loading) {
-    return <div style={{ padding: '24px', textAlign: 'center' }}>Loading notebook...</div>;
+    return (
+      <div className="p-6 text-center text-text-primary">
+        Loading notebook...
+      </div>
+    );
   }
 
   if (!notebook) {
-    return <div style={{ padding: '24px', textAlign: 'center' }}>Notebook not found</div>;
+    return (
+      <div className="p-6 text-center text-text-primary">
+        Notebook not found
+      </div>
+    );
   }
 
   return (
     <div>
-      <h1 style={{ fontSize: '28px', fontWeight: 'bold', marginBottom: '24px' }}>
-        Reactive Notebook
-      </h1>
-
       {/* DB Connection */}
-      <div style={{
-        marginBottom: '24px',
-        padding: '16px',
-        backgroundColor: '#f9fafb',
-        borderRadius: '8px'
-      }}>
-        <label style={{
-          display: 'block',
-          fontSize: '14px',
-          fontWeight: 500,
-          marginBottom: '8px'
-        }}>
+      <div className="card-section">
+        <label className="label">
           PostgreSQL Connection String:
         </label>
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <div className="flex-row-gap">
           <input
             type="text"
             value={dbConnString}
             onChange={(e) => setDbConnString(e.target.value)}
             placeholder="postgresql://user:pass@host:5432/db"
-            style={{
-              flex: 1,
-              padding: '8px 12px',
-              border: '1px solid #d1d5db',
-              borderRadius: '4px',
-              fontSize: '14px'
-            }}
+            className="flex-full input-field"
           />
           <button
             onClick={handleUpdateDbConnection}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: '#059669',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '14px'
-            }}
-            onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#047857'}
-            onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#059669'}
+            className="btn-success"
           >
             Update
           </button>
@@ -233,52 +211,25 @@ export function Notebook({ notebookId }: NotebookProps) {
       ))}
 
       {/* Add Cell Buttons */}
-      <div style={{ display: 'flex', gap: '8px' }}>
+      <div className="flex-row-gap">
         <button
           onClick={() => handleAddCell('python')}
-          style={{
-            padding: '8px 16px',
-            backgroundColor: '#2563eb',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontSize: '14px'
-          }}
-          onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#1d4ed8'}
-          onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#2563eb'}
+          className="btn-primary"
         >
           + Python Cell
         </button>
         <button
           onClick={() => handleAddCell('sql')}
-          style={{
-            padding: '8px 16px',
-            backgroundColor: '#7c3aed',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontSize: '14px'
-          }}
-          onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#6d28d9'}
-          onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#7c3aed'}
+          className="btn-primary"
         >
           + SQL Cell
         </button>
       </div>
 
       {/* Instructions */}
-      <div style={{
-        marginTop: '32px',
-        padding: '16px',
-        backgroundColor: '#eff6ff',
-        borderRadius: '8px',
-        fontSize: '14px',
-        color: '#1e40af'
-      }}>
+      <div className="card-info mt-8">
         <strong>How to use:</strong>
-        <ul style={{ marginTop: '8px', marginLeft: '20px' }}>
+        <ul className="mt-2 ml-5 space-y-1">
           <li>Edit code in cells and press Ctrl+Enter (or click Run) to execute</li>
           <li>Cells automatically re-run when their dependencies change</li>
           <li>Use &#123;variable&#125; syntax in SQL cells to reference Python variables</li>

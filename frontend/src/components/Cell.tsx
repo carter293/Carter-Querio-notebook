@@ -4,6 +4,7 @@ import type { editor } from 'monaco-editor';
 import { KeyMod, KeyCode } from 'monaco-editor';
 import { Cell as CellType } from '../api-client';
 import { OutputRenderer } from './OutputRenderer';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface CellProps {
   cell: CellType;
@@ -16,13 +17,6 @@ interface CellProps {
 // navigator.userAgentData is not yet supported on macOS/iOS, so we use userAgent
 const isMac = navigator.userAgent.includes('Mac OS X');
 
-const statusColors = {
-  idle: '#9ca3af',
-  running: '#3b82f6',
-  success: '#10b981',
-  error: '#ef4444',
-  blocked: '#f59e0b'
-};
 
 const statusIcons = {
   idle: '○',
@@ -37,6 +31,7 @@ export function Cell({ cell, onRunCell, onUpdateCell, onDeleteCell }: CellProps)
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const codeRef = useRef(code);
   const runCellRef = useRef<() => void>();
+  const { theme } = useTheme();
 
   // Keep codeRef in sync with code state
   useEffect(() => {
@@ -88,73 +83,38 @@ export function Cell({ cell, onRunCell, onUpdateCell, onDeleteCell }: CellProps)
   };
 
   return (
-    <div style={{
-      border: '1px solid #d1d5db',
-      borderRadius: '8px',
-      padding: '16px',
-      marginBottom: '16px',
-      backgroundColor: 'white',
-      boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-    }}>
+    <div className="card-cell">
       {/* Header */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: '8px'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div style={{
-            width: '12px',
-            height: '12px',
-            borderRadius: '50%',
-            backgroundColor: statusColors[cell.status],
-            animation: cell.status === 'running' ? 'pulse 1.5s infinite' : 'none'
-          }} title={cell.status} />
-          <span style={{ fontSize: '14px', fontWeight: 500 }}>
+      <div className="flex-row-between mb-2">
+        <div className="flex-row-center">
+          <div 
+            className={`status-dot-${cell.status}`}
+            title={cell.status}
+          />
+          <span className="text-label">
             {statusIcons[cell.status]} {cell.type.toUpperCase()}
           </span>
           {cell.writes.length > 0 && (
-            <span style={{ fontSize: '12px', color: '#6b7280' }}>
+            <span className="text-helper">
               writes: {cell.writes.join(', ')}
             </span>
           )}
           {cell.reads.length > 0 && (
-            <span style={{ fontSize: '12px', color: '#6b7280' }}>
+            <span className="text-helper">
               reads: {cell.reads.join(', ')}
             </span>
           )}
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <div className="flex-row-gap">
           <button
             onClick={handleRunClick}
-            style={{
-              padding: '6px 12px',
-              backgroundColor: '#2563eb',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '14px'
-            }}
-            onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#1d4ed8'}
-            onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#2563eb'}
+            className="btn-primary-sm"
           >
             Run ({isMac ? '⌘' : 'Ctrl'}+Enter)
           </button>
           <button
             onClick={() => onDeleteCell(cell.id)}
-            style={{
-              padding: '6px 12px',
-              backgroundColor: '#dc2626',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '14px'
-            }}
-            onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#b91c1c'}
-            onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#dc2626'}
+            className="btn-danger-sm"
           >
             Delete
           </button>
@@ -162,13 +122,14 @@ export function Cell({ cell, onRunCell, onUpdateCell, onDeleteCell }: CellProps)
       </div>
 
       {/* Code Editor */}
-      <div style={{ border: '1px solid #d1d5db', borderRadius: '4px' }}>
+      <div className="editor-container">
         <Editor
           height="150px"
           language={cell.type === 'python' ? 'python' : 'sql'}
           value={code}
           onChange={handleEditorChange}
           onMount={handleEditorMount}
+          theme={theme === 'dark' ? 'vs-dark' : 'vs'}
           options={{
             minimap: { enabled: false },
             lineNumbers: 'on',
@@ -181,58 +142,31 @@ export function Cell({ cell, onRunCell, onUpdateCell, onDeleteCell }: CellProps)
 
       {/* Output */}
       {cell.status !== 'idle' && (
-        <div style={{ marginTop: '12px' }}>
+        <div className="mt-3">
           {/* Stdout */}
           {cell.stdout && (
-            <pre style={{
-              backgroundColor: '#f3f4f6',
-              padding: '8px',
-              borderRadius: '4px',
-              fontSize: '13px',
-              overflow: 'auto',
-              margin: '8px 0'
-            }}>
+            <pre className="output-pre">
               {cell.stdout}
             </pre>
           )}
 
           {/* Rich outputs */}
           {cell.outputs && cell.outputs.map((output, idx) => (
-            <div key={`${cell.id}-output-${idx}-${cell.status}`} style={{
-              backgroundColor: '#f3f4f6',
-              padding: '8px',
-              borderRadius: '4px',
-              marginTop: '8px'
-            }}>
+            <div key={`${cell.id}-output-${idx}-${cell.status}`} className="output-block">
               <OutputRenderer output={output} cellId={cell.id} outputIndex={idx} />
             </div>
           ))}
 
           {/* Error */}
           {cell.error && (
-            <pre style={{
-              backgroundColor: '#fef2f2',
-              color: '#991b1b',
-              padding: '8px',
-              borderRadius: '4px',
-              fontSize: '13px',
-              overflow: 'auto',
-              marginTop: '8px'
-            }}>
+            <pre className="output-error">
               {cell.error}
             </pre>
           )}
 
           {/* Blocked status */}
           {cell.status === 'blocked' && !cell.error && (
-            <div style={{
-              backgroundColor: '#fffbeb',
-              color: '#92400e',
-              padding: '8px',
-              borderRadius: '4px',
-              fontSize: '13px',
-              marginTop: '8px'
-            }}>
+            <div className="output-warning">
               ⚠️ Upstream dependency failed.
             </div>
           )}

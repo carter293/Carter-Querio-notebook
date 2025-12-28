@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Routes, Route, useParams, useNavigate, Navigate } from 'react-router-dom';
 import { Notebook } from './components/Notebook';
 import { NotebookSelector } from './components/NotebookSelector';
+import { ThemeToggle } from './components/ThemeToggle';
 import * as api from './api-client';
 
 function NotebookView() {
@@ -61,29 +62,34 @@ function NotebookView() {
 
   if (error) {
     return (
-      <div style={{
-        padding: '24px',
-        textAlign: 'center',
-        color: '#991b1b'
-      }}>
-        Error: {error}
+      <div className="min-h-screen bg-output flex items-center justify-center">
+        <div className="p-6 text-center text-error">
+          Error: {error}
+        </div>
       </div>
     );
   }
 
   if (loading && !effectiveNotebookId) {
     return (
-      <div style={{
-        padding: '24px',
-        textAlign: 'center'
-      }}>
-        Loading notebooks...
+      <div className="min-h-screen bg-output flex items-center justify-center">
+        <div className="p-6 text-center text-text-primary">
+          Loading notebooks...
+        </div>
       </div>
     );
   }
 
   return (
-    <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '24px' }}>
+    <div className="min-h-screen bg-output">
+      <div className="max-w-4xl mx-auto px-6 py-6">
+      <div className="flex-row-between mb-6">
+        <h1 className="text-2xl font-bold text-text-primary">
+          Reactive Notebook
+        </h1>
+        <ThemeToggle />
+      </div>
+      
       <NotebookSelector
         notebooks={notebooks}
         selectedNotebookId={effectiveNotebookId}
@@ -93,6 +99,7 @@ function NotebookView() {
         loading={loading}
       />
       {effectiveNotebookId && <Notebook notebookId={effectiveNotebookId} />}
+      </div>
     </div>
   );
 }
