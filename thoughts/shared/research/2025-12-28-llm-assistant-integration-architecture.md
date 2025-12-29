@@ -2,10 +2,11 @@
 date: 2025-12-28T17:08:10Z
 researcher: Claude
 topic: "LLM Assistant Integration Architecture for Reactive Notebook"
-tags: [research, codebase, llm-integration, vercel-ai-sdk, concurrency, architecture]
+tags: [research, codebase, llm-integration, sse, anthropic, concurrency, architecture]
 status: complete
-last_updated: 2025-12-28
+last_updated: 2025-12-29
 last_updated_by: Claude
+decisions_finalized: 2025-12-29
 ---
 
 # Research: LLM Assistant Integration Architecture for Reactive Notebook
@@ -31,12 +32,13 @@ The current reactive notebook implementation has **significant concurrency vulne
 3. Kernel state corruption when variables are deleted during execution
 4. Inconsistent WebSocket message ordering to clients
 
-**Recommended Architecture**:
-1. Implement notebook-level read-write lock for all state mutations
-2. Add optimistic locking using the existing `revision` field
-3. Create LLM tool interface as FastAPI endpoints with same locking semantics
-4. Use Vercel AI SDK on frontend with server-side tools for notebook operations
-5. Stream LLM responses via SSE or WebSocket while maintaining lock discipline
+**Final Recommended Architecture** (Decisions Finalized):
+1. **Concurrency**: Implement notebook-level asyncio.Lock for all state mutations + optimistic locking with revision field
+2. **Context Management**: `get_notebook_state` tool with lightweight MIME previews (not full images)
+3. **Tool Execution**: LLM tools wait for cell completion (30s timeout with graceful handling)
+4. **Conflict Resolution**: Grey out UI during LLM work + last-write-wins with undo notifications
+5. **Access Control**: Broad LLM access (can create/update/delete/run cells) with audit logging
+6. **Streaming**: Native Anthropic SDK + SSE (via `sse-starlette`), NOT Vercel AI SDK due to FastAPI compatibility issues
 
 ## Detailed Findings
 
@@ -668,31 +670,587 @@ async def _drain_queue(self, notebook_id: str, notebook, broadcaster):
 
 **Alternative**: Use read-write lock to allow concurrent reads but exclusive writes
 
-## Open Questions
+## Open Questions - RESOLVED
 
-1. **LLM Context Management**: How to keep LLM updated with current notebook state?
-   - Option A: Include full notebook state in system prompt on each request (simple but token-heavy)
-   - Option B: Stream notebook changes to LLM via WebSocket (complex but efficient)
-   - Option C: LLM queries notebook state via read-only tools
+### 1. LLM Context Management
+**Decision**: Implement a `get_notebook_state` tool that returns cells and outputs on-demand
 
-2. **Tool Execution Latency**: What happens if LLM executes tool while cell is already running?
-   - Current behavior: `enqueue_run` adds to pending queue, will run after current execution
-   - Should LLM tools wait for execution completion before returning?
+**Rationale**:
+- After researching existing patterns (Context Conveyor pattern), the most practical approach is Option C: LLM queries notebook state via read-only tools
+- Avoids token-heavy full state dumps in every request
+- Simpler than streaming changes to LLM via WebSocket
+- LLM can request updates when needed
 
-3. **Conflict Resolution**: How should conflicts be presented to user?
-   - Show modal: "LLM modified cell X, your changes conflict"
-   - Merge changes (complex, like git merge)
-   - Last-write-wins with notification
+**Implementation Details**:
+```python
+{
+    "name": "get_notebook_state",
+    "description": "Get current state of all cells including code, outputs, and execution status",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "include_outputs": {"type": "boolean", "default": True},
+            "cell_ids": {"type": "array", "items": {"type": "string"}, "description": "Optional: specific cells to retrieve"}
+        }
+    }
+}
+```
 
-4. **LLM Access Control**: Should LLM have restrictions on what it can do?
-   - Can LLM delete cells?
-   - Can LLM modify database connection string?
-   - Should user approve certain tool calls?
+**MIME Type Handling**:
+- For images (plotly, matplotlib): Return base64-encoded PNG by default
+- For text outputs: Return as-is
+- For tables: Return as structured data (columns + rows)
+- Add `output_preview` field with truncated text representation for context
+- Full MIME data available but LLM receives lightweight preview
 
-5. **Streaming Strategy**: SSE vs WebSocket vs Vercel AI SDK?
-   - SSE: Standard HTTP, unidirectional, easy to implement
-   - WebSocket: Bidirectional, reuses existing infrastructure, need auth
-   - Vercel AI SDK: Best DX but requires Python port or JS backend for tool execution
+**Tool Response Format**:
+```json
+{
+    "cells": [
+        {
+            "id": "cell-123",
+            "type": "python",
+            "code": "import pandas as pd\ndf = pd.read_csv('data.csv')",
+            "status": "success",
+            "execution_order": 1,
+            "output_preview": "[DataFrame with 100 rows x 5 columns]",
+            "output_type": "dataframe",
+            "has_image": false,
+            "reads": [],
+            "writes": ["df"]
+        },
+        {
+            "id": "cell-456",
+            "type": "python",
+            "code": "df.plot()",
+            "status": "success",
+            "execution_order": 2,
+            "output_preview": "[Plotly chart: scatter plot]",
+            "output_type": "plotly",
+            "has_image": true,
+            "image_url": "data:image/png;base64,...",  // Optional: small preview
+            "reads": ["df"],
+            "writes": []
+        }
+    ],
+    "execution_in_progress": false,
+    "current_executing_cell": null
+}
+```
+
+### 2. Tool Execution Latency
+**Decision**: LLM tools should wait for cell execution completion before returning
+
+**Rationale**:
+- Prevents LLM from continuing conversation without knowing execution results
+- Allows LLM to see errors and adjust approach
+- User experience: LLM says "Running cell..." then reports success/failure
+- Implementation: `run_cell` tool uses `asyncio.wait_for()` with timeout
+
+**Implementation**:
+```python
+async def locked_run_cell(notebook: Notebook, cell_id: str, scheduler, broadcaster, timeout=30):
+    """Run cell and wait for completion"""
+    # Enqueue the cell
+    await scheduler.enqueue_run(notebook.id, cell_id, notebook, broadcaster)
+    
+    # Wait for status change to success/error
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        cell = next((c for c in notebook.cells if c.id == cell_id), None)
+        if cell.status in [CellStatus.SUCCESS, CellStatus.ERROR]:
+            return {
+                "status": cell.status,
+                "output": cell.output,
+                "error": cell.error if cell.status == CellStatus.ERROR else None
+            }
+        await asyncio.sleep(0.1)
+    
+    raise TimeoutError(f"Cell execution exceeded {timeout}s timeout")
+```
+
+**Alternative for long-running cells**:
+- Add `run_cell_async` tool that returns immediately with "queued" status
+- LLM can poll with `get_cell_status` tool
+- Better for cells that take >30 seconds
+
+### 3. Conflict Resolution
+**Decision**: Disable user interactions during LLM execution + last-write-wins for actual conflicts
+
+**Frontend UX**:
+- Grey out notebook or disable "Run" button when LLM is actively executing
+- Show indicator: "AI Assistant is working..." with spinner
+- User can still view cells but cannot trigger execution
+- User CAN still edit cell code (collaborative editing)
+
+**Conflict Strategy**:
+- **Last-Write-Wins**: When both user and LLM edit same cell, most recent change wins
+- **Optimistic Locking**: Use `revision` field to detect conflicts
+- **Conflict Detection**: If user edits cell while LLM tool is modifying it, LLM tool fails with 409 Conflict
+- **LLM Handling**: LLM receives error, queries current state, re-attempts with updated code
+
+**Why this approach**:
+- Simpler than git-style merging (overkill for notebook cells)
+- Users expect real-time collaboration behavior (like Google Docs)
+- LLM can recover from conflicts by re-reading state
+- Disable execution button prevents most dangerous conflicts (double-execution)
+
+**Conflict Notification**:
+```typescript
+// Frontend shows toast notification
+"AI Assistant updated this cell. Your edits were overwritten."
+// With undo button that restores user's version
+```
+
+### 4. LLM Access Control
+**Decision**: Grant LLM broad access with specific restrictions
+
+**Allowed Operations**:
+- ✅ Create cells (unlimited)
+- ✅ Update cell code (any cell)
+- ✅ Delete cells (any cell)
+- ✅ Run cells
+- ✅ Create new notebooks
+- ✅ Read notebook state
+
+**Restricted Operations**:
+- ❌ Modify database connection strings (if stored in backend config)
+- ❌ Access user credentials or API keys
+- ❌ Modify system-level settings
+
+**Implementation Strategy**:
+- No user approval workflow (streamlined UX)
+- All LLM actions logged for audit trail
+- LLM operates within same permissions as authenticated user
+- Database connection strings should be environment variables, not cell code
+- If user puts credentials in cell code, LLM can see/modify them (user responsibility)
+
+**Security Considerations**:
+- LLM has full access to notebook execution environment
+- Trust model: User trusts LLM as collaborative partner
+- Future enhancement: "Restricted mode" where user approves destructive operations
+
+### 5. Streaming Strategy
+**Decision**: Use native Anthropic/OpenAI streaming with SSE + `sse-starlette`
+
+**Research Findings**:
+- Vercel AI SDK + FastAPI integration exists but has reported issues (GitHub issue #7496)
+- `fastapi-ai-sdk` library available but adds dependency complexity
+- Native SSE with FastAPI is well-supported and mature
+- WebSocket would require auth implementation (currently missing)
+
+**Recommended Architecture**:
+```
+Frontend (React)
+  ↓ POST /api/chat/{notebook_id} (fetch EventSource)
+  ↓ Receive SSE stream
+Backend (FastAPI)
+  → Native anthropic.AsyncAnthropic client
+  → Stream text deltas via SSE
+  → Execute tools server-side with locks
+  → Broadcast tool results via existing WebSocket
+  → Return tool results in SSE stream
+```
+
+**Why SSE over Vercel AI SDK**:
+1. **Fewer dependencies**: Only need `sse-starlette` + `anthropic`/`openai`
+2. **Better compatibility**: No integration issues with FastAPI
+3. **Full control**: Custom tool execution logic, error handling
+4. **Authentication**: Works with existing Bearer token auth
+5. **Proven pattern**: SSE is standard for LLM streaming
+
+**Why SSE over WebSocket**:
+1. **Simpler**: Unidirectional streaming, no complex protocol
+2. **Auto-reconnect**: Browser handles reconnection automatically
+3. **HTTP-based**: Works with existing load balancers, proxies
+4. **Separate concerns**: SSE for LLM chat, existing WebSocket for notebook updates
+
+**Implementation Example**:
+```python
+from sse_starlette.sse import EventSourceResponse
+import anthropic
+
+@router.post("/chat/{notebook_id}")
+async def chat_with_notebook(
+    notebook_id: str,
+    request: ChatRequest,
+    user_id: str = Depends(get_current_user_dependency)
+):
+    async def event_generator():
+        client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
+        
+        async with client.messages.stream(
+            model="claude-3-5-sonnet-20241022",
+            messages=request.messages,
+            tools=[...],
+            max_tokens=4096
+        ) as stream:
+            async for event in stream:
+                if event.type == "content_block_delta":
+                    yield {
+                        "event": "text_delta",
+                        "data": json.dumps({"text": event.delta.text})
+                    }
+                elif event.type == "content_block_start":
+                    if event.content_block.type == "tool_use":
+                        yield {
+                            "event": "tool_start",
+                            "data": json.dumps({
+                                "tool": event.content_block.name,
+                                "input": event.content_block.input
+                            })
+                        }
+                        
+            # Execute tools after stream completes
+            final_message = await stream.get_final_message()
+            for block in final_message.content:
+                if block.type == "tool_use":
+                    result = await execute_tool(notebook_id, block.name, block.input)
+                    yield {
+                        "event": "tool_result",
+                        "data": json.dumps({"tool": block.name, "result": result})
+                    }
+    
+    return EventSourceResponse(event_generator())
+```
+
+**Frontend Integration**:
+```typescript
+// Use native EventSource API or fetch with streaming
+const eventSource = new EventSource(`/api/chat/${notebookId}`);
+eventSource.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    // Handle text_delta, tool_start, tool_result events
+};
+```
+
+## Additional Analysis & Recommendations
+
+### Conflict Resolution: My Thoughts
+
+I think your **last-write-wins** approach with **UI disabling** is the right balance. Here's why:
+
+**Pros of This Approach**:
+1. **Simple Mental Model**: Users understand "latest change wins" - it's like Google Docs
+2. **Avoids Analysis Paralysis**: No complex merge UI or conflict resolution dialogs
+3. **LLM Can Self-Correct**: If LLM's change gets overwritten, it can detect this via `get_notebook_state` and adapt
+4. **Prevents Execution Conflicts**: Greying out run button during LLM work prevents the most critical issue (concurrent execution)
+
+**Potential Edge Cases**:
+1. **Rapid User Edits During LLM Work**: User types while LLM updates same cell
+   - Solution: Add debouncing on user edits (300ms) before saving
+   - Show "Saving..." indicator
+   - If conflict occurs, show toast with undo option
+
+2. **LLM Deletes Cell User Is Editing**:
+   - Frontend should detect cell deletion via WebSocket
+   - Show modal: "AI deleted this cell. Restore it?" with one-click undo
+   - Keep deleted cell in "trash" for 30 seconds
+
+3. **Multiple LLM Requests in Parallel** (if you allow this):
+   - Use the notebook lock to serialize LLM tool executions
+   - Each tool call waits for lock before modifying state
+   - This is already handled by the locking architecture
+
+**UI/UX Recommendations**:
+```typescript
+// When LLM is working
+<div className="llm-working-overlay">
+  <Spinner />
+  <p>AI Assistant is working...</p>
+  <button onClick={forceStop}>Stop AI</button>
+</div>
+
+// Grey out cells but keep them visible
+<Cell 
+  disabled={isLLMWorking} 
+  className={isLLMWorking ? "opacity-50 pointer-events-none" : ""}
+/>
+
+// Show conflict toast with undo
+<Toast>
+  AI updated this cell. Your changes were overwritten.
+  <button onClick={undoToMyVersion}>Undo</button>
+</Toast>
+```
+
+### Context Management: Image Handling Strategy
+
+For your concern about MIME types and image rendering:
+
+**Problem**: Images (plotly, matplotlib) can be large, eating up LLM context tokens
+
+**Solution**: Multi-tier context strategy
+1. **Lightweight Preview** (always sent to LLM):
+   ```json
+   {
+       "output_preview": "[Plotly scatter plot: 150 points, x='date', y='price']",
+       "output_type": "plotly",
+       "has_image": true
+   }
+   ```
+
+2. **Metadata Only** (for LLM reasoning):
+   ```json
+   {
+       "chart_type": "scatter",
+       "data_shape": {"rows": 150, "columns": 2},
+       "axes": {"x": "date", "y": "price"}
+   }
+   ```
+
+3. **Full Data** (optional tool):
+   - Add `get_cell_image` tool that returns base64 PNG
+   - LLM requests image only when needed (e.g., "show me the chart")
+   - User can also share screenshot via chat if using multi-modal LLM
+
+**For Different Output Types**:
+- **DataFrames**: Send shape + column names, not full data
+  ```json
+  "output_preview": "DataFrame(100 rows, 5 columns: ['name', 'age', 'city', 'income', 'score'])"
+  ```
+  
+- **Plotly**: Send chart type + data summary
+  ```json
+  "output_preview": "Scatter plot: 200 points showing correlation between X and Y (R²=0.85)"
+  ```
+
+- **Text/Stdout**: Send first 500 chars
+  ```json
+  "output_preview": "Hello World\nProcessed 1000 records...\n[truncated]"
+  ```
+
+- **Errors**: Send full error message (important for LLM debugging)
+
+**Implementation in `get_notebook_state` tool**:
+```python
+def create_output_preview(cell):
+    if cell.output_type == "plotly":
+        # Extract metadata from plotly JSON
+        return {
+            "preview": f"[{cell.output.get('data', [{}])[0].get('type', 'unknown')} chart]",
+            "has_image": True,
+            "metadata": extract_plotly_metadata(cell.output)
+        }
+    elif cell.output_type == "dataframe":
+        # Parse DataFrame shape
+        return {
+            "preview": f"[DataFrame: {cell.output['shape'][0]} rows x {cell.output['shape'][1]} cols]",
+            "columns": cell.output.get('columns', [])
+        }
+    elif cell.output_type == "text":
+        return {
+            "preview": cell.output[:500] + ("..." if len(cell.output) > 500 else "")
+        }
+```
+
+### Streaming: SSE Implementation Details
+
+Based on research, here's the cleanest implementation path:
+
+**Why NOT Vercel AI SDK**:
+- GitHub issue #7496 shows data streaming problems with FastAPI
+- Adds unnecessary abstraction layer
+- You'd need `fastapi-ai-sdk` library (another dependency)
+- Tool execution happens server-side anyway, so frontend SDK benefits are minimal
+
+**Why YES to native Anthropic SDK + SSE**:
+- `anthropic` Python SDK has excellent async streaming support
+- `sse-starlette` is mature and FastAPI-compatible
+- Full control over tool execution flow
+- Can use Claude's native tool-calling format
+
+**Hybrid Approach** (Recommended):
+1. **SSE for LLM chat stream** (`/api/chat/{notebook_id}`)
+   - Sends text deltas from LLM
+   - Sends tool execution events
+   - One-way: Server → Frontend
+
+2. **Existing WebSocket for notebook updates** (`/api/ws/notebooks/{notebook_id}`)
+   - Broadcasts cell updates from LLM tools
+   - Broadcasts cell updates from user
+   - Two-way: Server ↔ Frontend
+
+3. **REST API for user actions** (existing endpoints)
+   - User creates/updates/deletes cells
+   - User triggers cell execution
+
+**Why This Is Clean**:
+- Each channel has single responsibility
+- SSE handles LLM conversation (sequential, text-heavy)
+- WebSocket handles real-time notebook sync (event-driven)
+- REST handles user mutations (CRUD operations)
+
+**Event Flow Example**:
+```
+User: "Create a chart showing sales over time"
+  ↓
+Frontend: POST /api/chat/{notebook_id} (SSE connection)
+  ↓
+Backend: Stream LLM response
+  → SSE: {"event": "text_delta", "data": "I'll create a chart..."}
+  → LLM calls updateCell tool
+  → SSE: {"event": "tool_start", "data": {"tool": "updateCell", ...}}
+  → Execute tool (with lock)
+  → WebSocket broadcast: cell_updated
+  → SSE: {"event": "tool_result", "data": {"status": "ok"}}
+  → LLM calls runCell tool
+  → Execute cell (with lock)
+  → WebSocket broadcast: cell_status, cell_output
+  → SSE: {"event": "text_delta", "data": "Chart created!"}
+  ↓
+Frontend: 
+  - Displays LLM message via SSE
+  - Updates notebook UI via WebSocket
+```
+
+### Tool Execution Latency: Timeout Strategy
+
+For your decision to wait for cell completion:
+
+**Timeout Handling**:
+```python
+CELL_EXECUTION_TIMEOUT = 30  # seconds
+LONG_RUNNING_THRESHOLD = 5   # seconds
+
+async def locked_run_cell_with_timeout(notebook, cell_id, scheduler, broadcaster):
+    """Run cell and wait, but handle timeouts gracefully"""
+    start_time = time.time()
+    
+    # Enqueue
+    await scheduler.enqueue_run(notebook.id, cell_id, notebook, broadcaster)
+    
+    # Poll for completion
+    while time.time() - start_time < CELL_EXECUTION_TIMEOUT:
+        cell = next((c for c in notebook.cells if c.id == cell_id), None)
+        
+        if cell.status == CellStatus.SUCCESS:
+            return {"status": "success", "output": cell.output}
+        
+        if cell.status == CellStatus.ERROR:
+            return {"status": "error", "error": cell.error}
+        
+        # Warn LLM if taking long
+        elapsed = time.time() - start_time
+        if elapsed > LONG_RUNNING_THRESHOLD and not getattr(cell, '_warned', False):
+            # Send intermediate update via SSE
+            await broadcast_sse_event({
+                "event": "tool_update",
+                "data": {"message": f"Cell still running ({elapsed:.0f}s)..."}
+            })
+            cell._warned = True
+        
+        await asyncio.sleep(0.2)
+    
+    # Timeout
+    return {
+        "status": "timeout",
+        "error": f"Cell execution exceeded {CELL_EXECUTION_TIMEOUT}s timeout. Cell may still be running."
+    }
+```
+
+**LLM Prompt Engineering**:
+```python
+system_prompt = """
+You are an AI assistant helping with a reactive notebook.
+
+When you run cells:
+- Cells have a 30 second timeout
+- If a cell times out, you can check status with get_cell_status tool
+- For long-running operations, warn the user first
+- You can create async cells (e.g., database queries) and check back later
+
+Current notebook state:
+{notebook_state}
+"""
+```
+
+### Access Control: Future Enhancements
+
+While you've decided on broad access now, consider these for future:
+
+**Audit Logging**:
+```python
+# backend/audit_log.py
+async def log_llm_action(notebook_id: str, action: str, details: dict):
+    """Log all LLM actions for security audit"""
+    await db.execute(
+        "INSERT INTO llm_audit_log (notebook_id, action, details, timestamp) VALUES ($1, $2, $3, $4)",
+        notebook_id, action, json.dumps(details), datetime.utcnow()
+    )
+```
+
+**Rate Limiting**:
+```python
+# Prevent runaway LLM tool calls
+from fastapi_limiter.depends import RateLimiter
+
+@router.post("/chat/{notebook_id}")
+@limiter.limit("20/minute")  # Max 20 tool calls per minute
+async def chat_with_notebook(...):
+    ...
+```
+
+**Dangerous Operation Detection**:
+```python
+# Flag potentially dangerous operations
+DANGEROUS_PATTERNS = [
+    r"os\.system",
+    r"subprocess",
+    r"__import__",
+    r"eval\(",
+    r"exec\(",
+]
+
+def is_code_safe(code: str) -> bool:
+    """Check for dangerous patterns"""
+    return not any(re.search(pattern, code) for pattern in DANGEROUS_PATTERNS)
+
+# In updateCell tool:
+if not is_code_safe(new_code):
+    # Log warning but still allow (user responsibility)
+    await log_warning(f"LLM created cell with potentially dangerous code: {cell_id}")
+```
+
+## Implementation Priority & Timeline
+
+Based on the resolved questions, here's the recommended implementation order:
+
+**Week 1: Concurrency Foundation** (CRITICAL)
+1. Add notebook-level `asyncio.Lock` to Notebook model
+2. Refactor all mutation endpoints to use locks
+3. Implement atomic file saves with temp files
+4. Add optimistic locking with revision checks
+5. Coordinate scheduler with notebook lock
+6. Write concurrency tests
+
+**Week 2: LLM Tool Interface**
+1. Create `notebook_operations.py` with locked operations
+2. Implement `get_notebook_state` tool with MIME handling
+3. Implement `updateCell`, `createCell`, `deleteCell`, `runCell` tools
+4. Add tool execution timeout handling
+5. Write tool integration tests
+
+**Week 3: Streaming & Chat Endpoint**
+1. Add `anthropic` and `sse-starlette` dependencies
+2. Implement `/api/chat/{notebook_id}` SSE endpoint
+3. Implement tool dispatch and execution
+4. Add error handling and retry logic
+5. Test streaming with real LLM
+
+**Week 4: Frontend Integration**
+1. Build `ChatPanel.tsx` component with SSE handling
+2. Add LLM working indicator (grey out UI)
+3. Implement conflict toast notifications with undo
+4. Add tool execution visualization in chat
+5. Integrate with existing WebSocket updates
+
+**Week 5: Polish & Advanced Features**
+1. Add audit logging for LLM actions
+2. Implement undo/trash for deleted cells
+3. Add rate limiting for tool calls
+4. Improve error messages and user feedback
+5. Add conversation history persistence
 
 ## Code References
 
@@ -718,33 +1276,36 @@ async def _drain_queue(self, notebook_id: str, notebook, broadcaster):
 
 No existing research documents found related to LLM integration. This is the first exploration of AI assistant features for this notebook application.
 
+## Implementation Documents
+
+**All open questions have been resolved. See the following documents for implementation details:**
+
+1. **Decisions Summary** - `thoughts/shared/plans/2025-12-29-llm-integration-decisions-summary.md`
+   - Quick reference for all key decisions
+   - Executive summary of choices and rationale
+   - Dependencies and environment setup
+
+2. **Implementation Plan** - `thoughts/shared/plans/2025-12-29-llm-assistant-implementation-plan.md`
+   - Complete step-by-step implementation guide
+   - Full code examples for all phases
+   - Testing checklist and deployment notes
+
+3. **Architecture Diagram** - `thoughts/shared/plans/2025-12-29-llm-architecture-diagram.md`
+   - Visual system architecture
+   - Message flow diagrams
+   - Concurrency protection patterns
+   - Output preview strategy
+
 ## Next Steps
 
-1. **Phase 1: Fix Concurrency Issues (Prerequisite)**
-   - Add notebook-level lock to Notebook model
-   - Refactor all mutation endpoints to use locks
-   - Implement atomic file saves
-   - Coordinate scheduler with notebook lock
-   - Add optimistic locking with revision checks
+**READY TO IMPLEMENT** - All design decisions finalized.
 
-2. **Phase 2: Design LLM Tool Interface**
-   - Define tool schemas (create_cell, update_cell, run_cell, delete_cell, get_notebook_state)
-   - Implement locked tool execution functions
-   - Add tool execution tests
+Start with Phase 1 (Week 1): Concurrency Foundation
+1. Add notebook-level lock to Notebook model
+2. Create locked operations module
+3. Refactor all mutation endpoints to use locks
+4. Implement atomic file saves
+5. Coordinate scheduler with notebook lock
+6. Write concurrency tests
 
-3. **Phase 3: Choose Streaming Strategy**
-   - Evaluate: Vercel AI SDK vs SSE vs WebSocket
-   - Prototype chosen approach
-   - Implement chat endpoint
-
-4. **Phase 4: Frontend Integration**
-   - Build ChatPanel component
-   - Handle streaming responses
-   - Display tool executions in UI
-   - Synchronize with existing WebSocket updates
-
-5. **Phase 5: Advanced Features**
-   - LLM context management (include cell outputs, errors)
-   - Conflict resolution UI
-   - Tool approval workflow for sensitive operations
-   - Multi-turn conversation with notebook state awareness
+See implementation plan for complete roadmap.
