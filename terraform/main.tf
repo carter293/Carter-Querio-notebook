@@ -60,7 +60,7 @@ module "compute" {
   backend_desired_count        = var.backend_desired_count
   alb_certificate_arn          = var.alb_certificate_arn
   clerk_secret_key             = var.clerk_secret_key
-  
+
   # CORS origins configuration
   allowed_origins = var.frontend_subdomain != "" && var.domain_name != "" ? "https://${module.cdn.cloudfront_domain_name},https://${var.frontend_subdomain}.${var.domain_name}" : "https://${module.cdn.cloudfront_domain_name}"
 }
