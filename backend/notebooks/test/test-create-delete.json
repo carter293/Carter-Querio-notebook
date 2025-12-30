@@ -1,0 +1,98 @@
+{
+  "id": "test-create-delete",
+  "name": "Test Notebook",
+  "db_conn_string": null,
+  "revision": 10,
+  "cells": [
+    {
+      "id": "0c63d77b-604e-4b35-80fe-9b3f701d8219",
+      "type": "python",
+      "code": "x0 = 0",
+      "reads": [],
+      "writes": [
+        "x0"
+      ]
+    },
+    {
+      "id": "790528fb-f8c5-4b15-ba61-3e6c297d1ab9",
+      "type": "python",
+      "code": "x1 = 1",
+      "reads": [],
+      "writes": [
+        "x1"
+      ]
+    },
+    {
+      "id": "38716245-7a73-455d-907b-0f159236d29f",
+      "type": "python",
+      "code": "x2 = 2",
+      "reads": [],
+      "writes": [
+        "x2"
+      ]
+    },
+    {
+      "id": "11897da4-ce5a-49ab-a019-46bd48404d7c",
+      "type": "python",
+      "code": "x3 = 3",
+      "reads": [],
+      "writes": [
+        "x3"
+      ]
+    },
+    {
+      "id": "11eab8b0-3e5e-4e42-9435-6dc44c326e19",
+      "type": "python",
+      "code": "x4 = 4",
+      "reads": [],
+      "writes": [
+        "x4"
+      ]
+    },
+    {
+      "id": "f1b52c87-f2d7-40b7-b0e4-089c33536fd0",
+      "type": "python",
+      "code": "x5 = 5",
+      "reads": [],
+      "writes": [
+        "x5"
+      ]
+    },
+    {
+      "id": "830a687b-cf2a-4bea-ad5f-ee9637b63303",
+      "type": "python",
+      "code": "x6 = 6",
+      "reads": [],
+      "writes": [
+        "x6"
+      ]
+    },
+    {
+      "id": "dd2b750c-29d7-4f3a-b80c-c1ed1afa0b7a",
+      "type": "python",
+      "code": "x7 = 7",
+      "reads": [],
+      "writes": [
+        "x7"
+      ]
+    },
+    {
+      "id": "9ea62ada-679d-4a1f-a931-9cf629d5b02b",
+      "type": "python",
+      "code": "x8 = 8",
+      "reads": [],
+      "writes": [
+        "x8"
+      ]
+    },
+    {
+      "id": "4a492702-cb9b-4196-b8eb-9014bf1855c6",
+      "type": "python",
+      "code": "x9 = 9",
+      "reads": [],
+      "writes": [
+        "x9"
+      ]
+    }
+  ]
+}

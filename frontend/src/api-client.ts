@@ -5,6 +5,7 @@ import {
   getNotebookApiNotebooksNotebookIdGet,
   updateDbConnectionApiNotebooksNotebookIdDbPut,
   renameNotebookApiNotebooksNotebookIdNamePut,
+  deleteNotebookEndpointApiNotebooksNotebookIdDelete,
   createCellApiNotebooksNotebookIdCellsPost,
   updateCellApiNotebooksNotebookIdCellsCellIdPut,
   deleteCellApiNotebooksNotebookIdCellsCellIdDelete,
@@ -12,25 +13,98 @@ import {
 import { client } from './client/client.gen';
 
 // Configure API base URL from environment variable
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 // WebSocket URL derived from API base URL
 export const WS_BASE_URL = API_BASE_URL.replace('https://', 'wss://').replace('http://', 'ws://');
-
-// Configure client with auth token
-export function configureClientAuth(token: string | null) {
-  client.setConfig({
-    baseUrl: API_BASE_URL,
-    headers: token ? {
-      'Authorization': `Bearer ${token}`
-    } : {},
-  });
-}
 
 // Initialize client without auth (will be configured per-request)
 client.setConfig({
   baseUrl: API_BASE_URL,
 });
+
+// ============================================================================
+// Authentication Interceptor Setup
+// ============================================================================
+
+// Track interceptor ID to prevent duplicate registration in React Strict Mode
+let requestInterceptorId: number | null = null;
+let responseInterceptorId: number | null = null;
+
+/**
+ * Setup authentication interceptor that automatically injects Clerk token
+ * into every request. Safe to call multiple times (idempotent).
+ * 
+ * @param getToken - Clerk's getToken function from useAuth()
+ * @returns Cleanup function to remove interceptors
+ */
+export function setupAuthInterceptor(getToken: () => Promise<string | null>): () => void {
+  // Prevent duplicate registration in React Strict Mode
+  if (requestInterceptorId !== null) {
+    console.warn('Auth interceptor already registered, skipping duplicate setup');
+    return () => {}; // Return no-op cleanup
+  }
+
+  // Register request interceptor - injects token into Authorization header
+  requestInterceptorId = client.interceptors.request.use(async (request, _options) => {
+    try {
+      // Call getToken() on EVERY request - Clerk caches and auto-refreshes
+      const token = await getToken();
+      
+      if (token) {
+        request.headers.set('Authorization', `Bearer ${token}`);
+      } else {
+        // Token not available yet (Clerk still loading or user not authenticated)
+        console.warn('No auth token available for request:', request.url);
+      }
+    } catch (error) {
+      console.error('Failed to get auth token:', error);
+      // Continue with request even if token fetch fails - backend will return 401
+    }
+    
+    return request;
+  });
+
+  // Register response interceptor - handle 401 with retry
+  responseInterceptorId = client.interceptors.response.use(async (response, request, _options) => {
+    // If 401, token may have expired - try once more with fresh token
+    if (response.status === 401) {
+      console.warn('Request failed with 401, attempting retry with fresh token');
+      
+      try {
+        const token = await getToken();
+        
+        if (token) {
+          // Clone request with new token
+          const newRequest = request.clone();
+          newRequest.headers.set('Authorization', `Bearer ${token}`);
+          
+          // Retry request with fresh token
+          const retryResponse = await fetch(newRequest);
+          return retryResponse;
+        } else {
+          console.error('No token available for retry, user may need to re-authenticate');
+        }
+      } catch (error) {
+        console.error('Failed to retry request with fresh token:', error);
+      }
+    }
+    
+    return response;
+  });
+
+  // Return cleanup function
+  return () => {
+    if (requestInterceptorId !== null) {
+      client.interceptors.request.eject(requestInterceptorId);
+      requestInterceptorId = null;
+    }
+    if (responseInterceptorId !== null) {
+      client.interceptors.response.eject(responseInterceptorId);
+      responseInterceptorId = null;
+    }
+  };
+}
 
 // Import and re-export types from generated client
 import type {
@@ -131,11 +205,28 @@ export async function renameNotebook(notebookId: string, name: string): Promise<
   }
 }
 
+export async function deleteNotebook(notebookId: string): Promise<void> {
+  const result = await deleteNotebookEndpointApiNotebooksNotebookIdDelete({
+    path: { notebook_id: notebookId },
+  });
+  
+  if (!result.response.ok) {
+    await handleApiError(result.response, 'delete notebook');
+  }
+}
+
 // Cell operations
-export async function createCell(notebookId: string, type: 'python' | 'sql'): Promise<{ cell_id: string }> {
+export async function createCell(
+  notebookId: string, 
+  type: 'python' | 'sql', 
+  afterCellId?: string
+): Promise<{ cell_id: string }> {
   const result = await createCellApiNotebooksNotebookIdCellsPost({
     path: { notebook_id: notebookId },
-    body: { type },
+    body: { 
+      type,
+      after_cell_id: afterCellId 
+    },
   });
   
   if (!result.response.ok) {

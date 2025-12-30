@@ -1,0 +1,47 @@
+{
+  "id": "186d2c07-ee99-4828-a3f4-f07517cc0130",
+  "user_id": "user_37U0GVSi47Y4pucE7h9iZVesr4b",
+  "name": "assistent tests",
+  "db_conn_string": null,
+  "revision": 7,
+  "cells": [
+    {
+      "id": "5eadd2a0-e509-4cd7-a6c0-965e03e4e7e8",
+      "type": "python",
+      "code": "import pandas as pd\nimport plotly.express as px\nimport numpy as np\n\nprint(\"Libraries imported successfully!\") ",
+      "reads": [
+        "print"
+      ],
+      "writes": [
+        "px",
+        "pd",
+        "np"
+      ]
+    },
+    {
+      "id": "25ec7605-1ab3-4888-9c51-1ca336ad1888",
+      "type": "python",
+      "code": "# Create a sample DataFrame\ndata = {\n    'Month': ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],\n    'Sales': [1200, 1500, 1800, 1300, 2000, 2200],\n    'Expenses': [800, 900, 1000, 850, 1100, 1200]\n}\n\ndf = pd.DataFrame(data)\nprint(\"DataFrame created:\")\nprint(df)",
+      "reads": [
+        "pd",
+        "print"
+      ],
+      "writes": [
+        "data",
+        "df"
+      ]
+    },
+    {
+      "id": "0fe8b98b-b245-4332-910f-cb98f80f09bf",
+      "type": "python",
+      "code": "# Create an interactive line chart\nfig = px.line(df, x='Month', y=['Sales', 'Expenses'], \n              title='Monthly Sales vs Expenses',\n              labels={'value': 'Amount ($)', 'variable': 'Category'},\n              markers=True)\n\nfig.update_layout(\n    xaxis_title='Month',\n    yaxis_title='Amount ($)',\n    legend_title='Category'\n)\n\nfig",
+      "reads": [
+        "px",
+        "df"
+      ],
+      "writes": [
+        "fig"
+      ]
+    }
+  ]
+}

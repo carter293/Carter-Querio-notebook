@@ -89,12 +89,13 @@ class WebSocketBroadcaster:
             "cell": cell_data  # {code, reads, writes, status}
         })
 
-    async def broadcast_cell_created(self, notebook_id: str, cell_data: dict):
+    async def broadcast_cell_created(self, notebook_id: str, cell_data: dict, index: int):
         """Broadcast cell creation"""
         await self.broadcast(notebook_id, {
             "type": "cell_created",
             "cellId": cell_data["id"],  # Include cellId for consistency with other messages
-            "cell": cell_data
+            "cell": cell_data,
+            "index": index  # Include the index where the cell was inserted
         })
 
     async def broadcast_cell_deleted(self, notebook_id: str, cell_id: str):

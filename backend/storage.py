@@ -1,5 +1,6 @@
 import json
 import os
+import tempfile
 from pathlib import Path
 from typing import Dict, List
 from models import Notebook, Cell, CellType, CellStatus, Graph, KernelState
@@ -14,6 +15,7 @@ def save_notebook(notebook: Notebook) -> None:
 
     data = {
         "id": notebook.id,
+        "user_id": notebook.user_id,
         "name": notebook.name,
         "db_conn_string": notebook.db_conn_string,
         "revision": notebook.revision,
@@ -30,8 +32,20 @@ def save_notebook(notebook: Notebook) -> None:
     }
 
     file_path = NOTEBOOKS_DIR / f"{notebook.id}.json"
-    with open(file_path, 'w') as f:
+    
+    # Write to temporary file first (atomic write)
+    with tempfile.NamedTemporaryFile(
+        mode='w',
+        dir=NOTEBOOKS_DIR,
+        delete=False,
+        suffix='.tmp',
+        prefix=f'{notebook.id}_'
+    ) as f:
         json.dump(data, f, indent=2)
+        temp_path = f.name
+    
+    # Atomic rename (POSIX guarantees atomicity)
+    os.replace(temp_path, file_path)
 
 def load_notebook(notebook_id: str) -> Notebook:
     file_path = NOTEBOOKS_DIR / f"{notebook_id}.json"
@@ -51,13 +65,26 @@ def load_notebook(notebook_id: str) -> Notebook:
         for cell_data in data["cells"]
     ]
 
+    # Extract user_id with backward compatibility
+    user_id = data.get("user_id")
+    if not user_id:
+        # Try to extract from notebook ID pattern: {name}-user_{user_id}
+        if "-user_" in notebook_id:
+            user_id = notebook_id.split("-user_", 1)[1]
+        else:
+            # Fallback for legacy notebooks without user_id
+            # Use a default system user_id for backward compatibility
+            user_id = "system"
+
     notebook = Notebook(
         id=data["id"],
+        user_id=user_id,
         name=data.get("name"), 
         db_conn_string=data.get("db_conn_string"),
         cells=cells,
         revision=data.get("revision", 0)
     )
+    # Lock is automatically initialized via default_factory in Notebook dataclass
 
     from graph import rebuild_graph
     rebuild_graph(notebook)
@@ -65,5 +92,13 @@ def load_notebook(notebook_id: str) -> Notebook:
     return notebook
 
 def list_notebooks() -> List[str]:
+    """List all notebooks, excluding test notebooks in subdirectories."""
     ensure_notebooks_dir()
-    return [f.stem for f in NOTEBOOKS_DIR.glob("*.json")]
+    # Only list JSON files in the root notebooks directory, not in subdirectories
+    return [f.stem for f in NOTEBOOKS_DIR.glob("*.json") if f.parent == NOTEBOOKS_DIR]
+
+def delete_notebook(notebook_id: str) -> None:
+    """Delete a notebook file from disk."""
+    file_path = NOTEBOOKS_DIR / f"{notebook_id}.json"
+    if file_path.exists():
+        file_path.unlink()

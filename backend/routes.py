@@ -9,9 +9,14 @@ from ast_parser import extract_dependencies, extract_sql_dependencies
 from graph import rebuild_graph, detect_cycle
 from websocket import broadcaster
 from scheduler import scheduler
-from storage import save_notebook, list_notebooks
+from storage import save_notebook, list_notebooks, delete_notebook
 from demo_notebook import create_demo_notebook
 from graph import rebuild_graph
+from notebook_operations import (
+    locked_update_cell,
+    locked_create_cell,
+    locked_delete_cell
+)
 import uuid
 
 # In-memory storage
@@ -34,6 +39,52 @@ def get_current_user_dependency_factory():
 # Create the dependency function
 get_current_user_dependency = get_current_user_dependency_factory()
 
+# ============================================================================
+# WebSocket Authentication Helpers
+# ============================================================================
+
+async def verify_clerk_token(token: str, clerk_client) -> Optional[str]:
+    """
+    Verify Clerk JWT token and extract user_id.
+    
+    Args:
+        token: JWT token string (without "Bearer " prefix)
+        clerk_client: Clerk SDK client instance
+        
+    Returns:
+        user_id if token is valid, None otherwise
+    """
+    try:
+        # Create a synthetic httpx request for token verification
+        # Build a minimal URL - Clerk only needs the token from the Authorization header
+        auth_header = f"Bearer {token}"
+        httpx_request = httpx.Request(
+            method="GET",
+            url="http://localhost:8000/",  # URL doesn't matter for token verification
+            headers={"authorization": auth_header}
+        )
+        
+        # Use Clerk's authenticate_request method
+        request_state = clerk_client.authenticate_request(
+            httpx_request,
+            AuthenticateRequestOptions()
+        )
+        
+        if not request_state.is_signed_in:
+            return None
+            
+        # Extract user_id from token payload
+        payload = request_state.payload
+        if not payload:
+            return None
+            
+        user_id = payload.get("sub")
+        return user_id
+        
+    except Exception as e:
+        print(f"Token verification error: {e}")
+        return None
+
 class CreateNotebookRequest(BaseModel):
     pass
 
@@ -45,6 +96,7 @@ class UpdateDbConnectionRequest(BaseModel):
 
 class CreateCellRequest(BaseModel):
     type: CellType
+    after_cell_id: Optional[str] = None 
 
 class UpdateCellRequest(BaseModel):
     code: str
@@ -275,6 +327,36 @@ async def rename_notebook(
     save_notebook(notebook)
     return {"status": "ok", "name": notebook.name}
 
+@router.delete("/notebooks/{notebook_id}")
+async def delete_notebook_endpoint(
+    notebook_id: str,
+    request: Request,
+    user_id: str = Depends(get_current_user_dependency)
+):
+    """Delete a notebook"""
+    if notebook_id not in NOTEBOOKS:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Notebook '{notebook_id}' not found. It may have been deleted or you don't have access to it."
+        )
+    
+    notebook = NOTEBOOKS[notebook_id]
+    
+    # Check ownership
+    if notebook.user_id != user_id:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Access denied: You don't have permission to delete notebook '{notebook_id}'"
+        )
+    
+    # Remove from memory
+    del NOTEBOOKS[notebook_id]
+    
+    # Remove from disk
+    delete_notebook(notebook_id)
+    
+    return {"status": "ok"}
+
 # Cell endpoints
 
 @router.post("/notebooks/{notebook_id}/cells", response_model=CreateCellResponse)
@@ -300,26 +382,41 @@ async def create_cell(
             detail=f"Access denied: You don't have permission to modify notebook '{notebook_id}'"
         )
 
-    new_cell = Cell(
-        id=str(uuid.uuid4()),
-        type=request_body.type,
-        code="",
-        status=CellStatus.IDLE
-    )
-
-    notebook.cells.append(new_cell)
-    save_notebook(notebook)
-    
-    await broadcaster.broadcast_cell_created(notebook_id, {
-        "id": new_cell.id,
-        "type": new_cell.type.value,
-        "code": new_cell.code,
-        "status": new_cell.status.value,
-        "reads": [],
-        "writes": []
-    })
-    
-    return CreateCellResponse(cell_id=new_cell.id)
+    try:
+        # Determine insertion index
+        index = None
+        if request_body.after_cell_id:
+            # Find the index of the cell we want to insert after
+            for i, cell in enumerate(notebook.cells):
+                if cell.id == request_body.after_cell_id:
+                    index = i + 1  # Insert after this cell
+                    break
+            if index is None:
+                raise HTTPException(status_code=404, detail=f"Cell '{request_body.after_cell_id}' not found")
+        
+        # Use locked operation
+        new_cell = await locked_create_cell(
+            notebook,
+            request_body.type,
+            "",  # Empty code for new cell
+            index  # Insert at specified index, or None to append to end
+        )
+        
+        # Find the actual index where the cell was inserted
+        cell_index = next(i for i, cell in enumerate(notebook.cells) if cell.id == new_cell.id)
+        
+        await broadcaster.broadcast_cell_created(notebook_id, {
+            "id": new_cell.id,
+            "type": new_cell.type.value,
+            "code": new_cell.code,
+            "status": new_cell.status.value,
+            "reads": list(new_cell.reads),
+            "writes": list(new_cell.writes)
+        }, cell_index)
+        
+        return CreateCellResponse(cell_id=new_cell.id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @router.put("/notebooks/{notebook_id}/cells/{cell_id}")
 async def update_cell(
@@ -345,44 +442,30 @@ async def update_cell(
             detail=f"Access denied: You don't have permission to modify notebook '{notebook_id}'"
         )
     
-    cell = next((c for c in notebook.cells if c.id == cell_id), None)
-
-    if not cell:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Cell '{cell_id}' not found in notebook '{notebook_id}'"
+    try:
+        # Use locked operation (no direct mutation!)
+        # Check for expected_revision in request body if provided
+        expected_revision = getattr(request_body, 'expected_revision', None)
+        cell = await locked_update_cell(
+            notebook,
+            cell_id,
+            request_body.code,
+            expected_revision=expected_revision
         )
-
-    cell.code = request_body.code
-    cell.status = CellStatus.IDLE
-
-    if cell.type == CellType.PYTHON:
-        reads, writes = extract_dependencies(cell.code)
-        cell.reads = reads
-        cell.writes = writes
-    elif cell.type == CellType.SQL:
-        reads = extract_sql_dependencies(cell.code)
-        cell.reads = reads
-        cell.writes = set()
-
-    rebuild_graph(notebook)
-
-    cycle = detect_cycle(notebook.graph, cell_id)
-    if cycle:
-        cell.status = CellStatus.ERROR
-        cell.error = f"Circular dependency detected: {' -> '.join(cycle)}"
-
-    notebook.revision += 1
-    save_notebook(notebook)
-    
-    await broadcaster.broadcast_cell_updated(notebook_id, cell_id, {
-        "code": cell.code,
-        "reads": list(cell.reads),
-        "writes": list(cell.writes),
-        "status": cell.status.value
-    })
-    
-    return {"status": "ok"}
+        
+        await broadcaster.broadcast_cell_updated(notebook_id, cell_id, {
+            "code": cell.code,
+            "reads": list(cell.reads),
+            "writes": list(cell.writes),
+            "status": cell.status.value,
+            "error": cell.error
+        })
+        
+        return {"status": "ok", "revision": notebook.revision}
+    except ValueError as e:
+        if "Revision conflict" in str(e):
+            raise HTTPException(status_code=409, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e))
 
 @router.delete("/notebooks/{notebook_id}/cells/{cell_id}")
 async def delete_cell(
@@ -407,98 +490,99 @@ async def delete_cell(
             detail=f"Access denied: You don't have permission to modify notebook '{notebook_id}'"
         )
 
-    cell = next((c for c in notebook.cells if c.id == cell_id), None)
-
-    notebook.cells = [c for c in notebook.cells if c.id != cell_id]
-    notebook.graph.remove_cell(cell_id)
-
-    if cell:
-        for var in cell.writes:
-            notebook.kernel.globals_dict.pop(var, None)
-
-    notebook.revision += 1
-    save_notebook(notebook)
-    
-    await broadcaster.broadcast_cell_deleted(notebook_id, cell_id)
-    
-    return {"status": "ok"}
+    try:
+        await locked_delete_cell(notebook, cell_id)
+        
+        await broadcaster.broadcast_cell_deleted(notebook_id, cell_id)
+        
+        return {"status": "ok", "revision": notebook.revision}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 # WebSocket endpoint
 
 @router.websocket("/ws/notebooks/{notebook_id}")
 async def notebook_websocket(websocket: WebSocket, notebook_id: str):
-    """WebSocket endpoint for real-time notebook updates"""
+    """
+    WebSocket endpoint for real-time notebook updates.
     
-    # Extract token from query parameters
-    query_string = websocket.scope.get("query_string", b"").decode()
-    query_params = parse_qs(query_string)
-    token = query_params.get("token", [None])[0]
+    Authentication Flow:
+    1. Accept connection
+    2. Wait for authentication message: {"type": "authenticate", "token": "..."}
+    3. Verify token and extract user_id
+    4. Send confirmation: {"type": "authenticated"}
+    5. Proceed with normal message handling
+    """
     
-    if not token:
-        await websocket.close(code=1008, reason="Missing authentication token")
-        return
-    
-    # Verify token and extract user_id using Clerk
-    try:
-        # Get Clerk client from app state (WebSocket has app attribute)
-        clerk = websocket.app.state.clerk
-        
-        # Create a synthetic httpx request for token verification
-        # Build URL from WebSocket scope
-        scheme = websocket.scope.get("scheme", "ws")
-        # Headers are a list of (name, value) tuples
-        headers_list = websocket.scope.get("headers", [])
-        host = "localhost:8000"  # Default
-        for name, value in headers_list:
-            if name == b"host":
-                host = value.decode() if isinstance(value, bytes) else value
-                break
-        path = websocket.scope.get("path", "")
-        url = f"{scheme}://{host}{path}"
-        
-        auth_header = f"Bearer {token}"
-        httpx_request = httpx.Request(
-            method="GET",
-            url=url,
-            headers={"authorization": auth_header}
-        )
-        
-        request_state = clerk.authenticate_request(
-            httpx_request,
-            AuthenticateRequestOptions()
-        )
-        
-        if not request_state.is_signed_in:
-            reason = request_state.reason or "Token verification failed"
-            await websocket.close(code=1008, reason=f"Authentication failed: {reason}")
-            return
-        
-        # Extract user_id from token
-        payload = request_state.payload
-        if not payload:
-            await websocket.close(code=1008, reason="Invalid token: missing payload")
-            return
-        
-        user_id = payload.get("sub")
-        if not user_id:
-            await websocket.close(code=1008, reason="Invalid token: missing user ID")
-            return
-        
-    except Exception as e:
-        await websocket.close(code=1008, reason=f"Authentication error: {str(e)}")
-        return
-    
-    # Accept connection after successful authentication
+    # Accept connection immediately (auth happens in-band)
     await websocket.accept()
     
-    # Handle legacy notebook IDs (demo -> demo-{user_id}, blank -> blank-{user_id})
+    # Step 1: Wait for authentication message
+    try:
+        # Set timeout for auth message (10 seconds)
+        import asyncio
+        auth_message = await asyncio.wait_for(
+            websocket.receive_json(),
+            timeout=10.0
+        )
+    except asyncio.TimeoutError:
+        await websocket.send_json({
+            "type": "error",
+            "message": "Authentication timeout"
+        })
+        await websocket.close(code=1008, reason="Authentication timeout")
+        return
+    except Exception as e:
+        await websocket.send_json({
+            "type": "error",
+            "message": f"Failed to receive authentication: {str(e)}"
+        })
+        await websocket.close(code=1008, reason="Invalid message format")
+        return
+    
+    # Step 2: Validate authentication message format
+    if not isinstance(auth_message, dict) or auth_message.get("type") != "authenticate":
+        await websocket.send_json({
+            "type": "error",
+            "message": "Expected authentication message"
+        })
+        await websocket.close(code=1008, reason="Expected authentication message")
+        return
+    
+    token = auth_message.get("token")
+    if not token:
+        await websocket.send_json({
+            "type": "error",
+            "message": "Missing authentication token"
+        })
+        await websocket.close(code=1008, reason="Missing token")
+        return
+    
+    # Step 3: Verify token using Clerk
+    clerk = websocket.app.state.clerk
+    user_id = await verify_clerk_token(token, clerk)
+    
+    if not user_id:
+        await websocket.send_json({
+            "type": "error",
+            "message": "Invalid authentication token"
+        })
+        await websocket.close(code=1008, reason="Invalid token")
+        return
+    
+    # Step 4: Send authentication confirmation
+    await websocket.send_json({
+        "type": "authenticated",
+        "user_id": user_id
+    })
+    
+    # Handle legacy notebook IDs
     if notebook_id == "demo":
         notebook_id = f"demo-{user_id}"
     elif notebook_id == "blank":
         notebook_id = f"blank-{user_id}"
     
     # Check if notebook exists
-    # Note: Should always exist because notebooks are provisioned during list call
     if notebook_id not in NOTEBOOKS:
         await websocket.send_json({
             "type": "error",
@@ -544,6 +628,30 @@ async def notebook_websocket(websocket: WebSocket, notebook_id: str):
                     continue
 
                 await scheduler.enqueue_run(notebook_id, cell_id, notebook, broadcaster)
+            
+            elif message["type"] == "refresh_auth":
+                # Support mid-connection token refresh
+                new_token = message.get("token")
+                if not new_token:
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": "Missing token in refresh request"
+                    })
+                    continue
+                
+                new_user_id = await verify_clerk_token(new_token, clerk)
+                
+                if not new_user_id or new_user_id != user_id:
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": "Token refresh failed: user mismatch"
+                    })
+                    # Don't close connection - keep using old auth
+                    continue
+                
+                await websocket.send_json({
+                    "type": "auth_refreshed"
+                })
 
     except WebSocketDisconnect:
         await broadcaster.disconnect(notebook_id, websocket)

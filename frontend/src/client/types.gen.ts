@@ -47,10 +47,38 @@ export type CellStatus = 'idle' | 'running' | 'success' | 'error' | 'blocked';
 export type CellType = 'python' | 'sql';
 
 /**
+ * ChatMessage
+ */
+export type ChatMessage = {
+    /**
+     * Role
+     */
+    role: string;
+    /**
+     * Content
+     */
+    content: string;
+};
+
+/**
+ * ChatRequest
+ */
+export type ChatRequest = {
+    /**
+     * Messages
+     */
+    messages: Array<ChatMessage>;
+};
+
+/**
  * CreateCellRequest
  */
 export type CreateCellRequest = {
     type: CellType;
+    /**
+     * After Cell Id
+     */
+    after_cell_id?: string | null;
 };
 
 /**
@@ -254,6 +282,34 @@ export type CreateNotebookApiNotebooksPostResponses = {
 
 export type CreateNotebookApiNotebooksPostResponse = CreateNotebookApiNotebooksPostResponses[keyof CreateNotebookApiNotebooksPostResponses];
 
+export type DeleteNotebookEndpointApiNotebooksNotebookIdDeleteData = {
+    body?: never;
+    path: {
+        /**
+         * Notebook Id
+         */
+        notebook_id: string;
+    };
+    query?: never;
+    url: '/api/notebooks/{notebook_id}';
+};
+
+export type DeleteNotebookEndpointApiNotebooksNotebookIdDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteNotebookEndpointApiNotebooksNotebookIdDeleteError = DeleteNotebookEndpointApiNotebooksNotebookIdDeleteErrors[keyof DeleteNotebookEndpointApiNotebooksNotebookIdDeleteErrors];
+
+export type DeleteNotebookEndpointApiNotebooksNotebookIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
 export type GetNotebookApiNotebooksNotebookIdGetData = {
     body?: never;
     path: {
@@ -428,6 +484,34 @@ export type UpdateCellApiNotebooksNotebookIdCellsCellIdPutErrors = {
 export type UpdateCellApiNotebooksNotebookIdCellsCellIdPutError = UpdateCellApiNotebooksNotebookIdCellsCellIdPutErrors[keyof UpdateCellApiNotebooksNotebookIdCellsCellIdPutErrors];
 
 export type UpdateCellApiNotebooksNotebookIdCellsCellIdPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type ChatWithNotebookApiChatNotebookIdPostData = {
+    body: ChatRequest;
+    path: {
+        /**
+         * Notebook Id
+         */
+        notebook_id: string;
+    };
+    query?: never;
+    url: '/api/chat/{notebook_id}';
+};
+
+export type ChatWithNotebookApiChatNotebookIdPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ChatWithNotebookApiChatNotebookIdPostError = ChatWithNotebookApiChatNotebookIdPostErrors[keyof ChatWithNotebookApiChatNotebookIdPostErrors];
+
+export type ChatWithNotebookApiChatNotebookIdPostResponses = {
     /**
      * Successful Response
      */

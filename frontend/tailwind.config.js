@@ -8,57 +8,76 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Semantic color tokens using CSS variables
-        surface: {
-          DEFAULT: 'rgb(var(--color-surface) / <alpha-value>)',
-          elevated: 'rgb(var(--color-surface-elevated) / <alpha-value>)',
-          secondary: 'rgb(var(--color-surface-secondary) / <alpha-value>)',
+        // Semantic color tokens using CSS variables with OKLCH
+        background: 'var(--background)',
+        foreground: 'var(--foreground)',
+        card: {
+          DEFAULT: 'var(--card)',
+          foreground: 'var(--card-foreground)',
+        },
+        popover: {
+          DEFAULT: 'var(--popover)',
+          foreground: 'var(--popover-foreground)',
         },
         primary: {
-          DEFAULT: 'rgb(var(--color-primary) / <alpha-value>)',
-          hover: 'rgb(var(--color-primary-hover) / <alpha-value>)',
-        },
-        success: {
-          DEFAULT: 'rgb(var(--color-success) / <alpha-value>)',
-          hover: 'rgb(var(--color-success-hover) / <alpha-value>)',
-        },
-        error: {
-          DEFAULT: 'rgb(var(--color-error) / <alpha-value>)',
-          hover: 'rgb(var(--color-error-hover) / <alpha-value>)',
-        },
-        warning: {
-          DEFAULT: 'rgb(var(--color-warning) / <alpha-value>)',
-          hover: 'rgb(var(--color-warning-hover) / <alpha-value>)',
+          DEFAULT: 'var(--primary)',
+          foreground: 'var(--primary-foreground)',
         },
         secondary: {
-          DEFAULT: 'rgb(var(--color-secondary) / <alpha-value>)',
-          hover: 'rgb(var(--color-secondary-hover) / <alpha-value>)',
+          DEFAULT: 'var(--secondary)',
+          foreground: 'var(--secondary-foreground)',
         },
-        status: {
-          idle: 'rgb(var(--color-status-idle) / <alpha-value>)',
-          running: 'rgb(var(--color-status-running) / <alpha-value>)',
-          success: 'rgb(var(--color-status-success) / <alpha-value>)',
-          error: 'rgb(var(--color-status-error) / <alpha-value>)',
-          blocked: 'rgb(var(--color-status-blocked) / <alpha-value>)',
+        muted: {
+          DEFAULT: 'var(--muted)',
+          foreground: 'var(--muted-foreground)',
+        },
+        accent: {
+          DEFAULT: 'var(--accent)',
+          foreground: 'var(--accent-foreground)',
+        },
+        destructive: {
+          DEFAULT: 'var(--destructive)',
+          foreground: 'var(--destructive-foreground)',
+        },
+        success: {
+          DEFAULT: 'var(--success)',
+          foreground: 'var(--success-foreground)',
+        },
+        warning: {
+          DEFAULT: 'var(--warning)',
+          foreground: 'var(--warning-foreground)',
+        },
+        border: 'var(--border)',
+        input: 'var(--input)',
+        ring: 'var(--ring)',
+
+        // Legacy color mappings for compatibility
+        surface: {
+          DEFAULT: 'var(--card)',
+          elevated: 'var(--accent)',
+          secondary: 'var(--muted)',
         },
         text: {
-          primary: 'rgb(var(--color-text-primary) / <alpha-value>)',
-          secondary: 'rgb(var(--color-text-secondary) / <alpha-value>)',
-          tertiary: 'rgb(var(--color-text-tertiary) / <alpha-value>)',
+          primary: 'var(--foreground)',
+          secondary: 'var(--muted-foreground)',
+          tertiary: 'var(--muted-foreground)',
         },
-        border: {
-          DEFAULT: 'rgb(var(--color-border) / <alpha-value>)',
-          focus: 'rgb(var(--color-border-focus) / <alpha-value>)',
+        status: {
+          idle: 'var(--status-idle)',
+          running: 'var(--status-running)',
+          success: 'var(--status-success)',
+          error: 'var(--status-error)',
+          blocked: 'var(--status-blocked)',
         },
         output: {
-          DEFAULT: 'rgb(var(--color-bg-output) / <alpha-value>)',
-          error: 'rgb(var(--color-bg-error) / <alpha-value>)',
-          warning: 'rgb(var(--color-bg-warning) / <alpha-value>)',
-          info: 'rgb(var(--color-bg-info) / <alpha-value>)',
+          DEFAULT: 'var(--bg-output)',
+          error: 'var(--bg-error)',
+          warning: 'var(--bg-warning)',
+          info: 'var(--bg-info)',
         },
         table: {
-          header: 'rgb(var(--color-table-header) / <alpha-value>)',
-          hover: 'rgb(var(--color-table-hover) / <alpha-value>)',
+          header: 'var(--table-header)',
+          hover: 'var(--table-hover)',
         },
       },
       animation: {
@@ -68,4 +87,3 @@ export default {
   },
   plugins: [],
 }
-

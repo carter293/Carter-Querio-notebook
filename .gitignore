@@ -58,3 +58,4 @@ override.tf.json
 *_override.tf.json
 .terraformrc
 terraform.rc
+thoughts/shared/research/2025-12-29-deep-dive.md

@@ -1,0 +1,148 @@
+{
+  "id": "e069b89e-9910-4750-af1c-f46c7291bad7",
+  "user_id": "user_37U0GVSi47Y4pucE7h9iZVesr4b",
+  "name": "Stock Analysis Test",
+  "db_conn_string": "",
+  "revision": 15,
+  "cells": [
+    {
+      "id": "f112c03d-f59c-49f4-8364-5bb869fe3230",
+      "type": "python",
+      "code": "# Install required packages\nimport subprocess\nimport sys\n\npackages = ['yfinance', 'plotly']\nfor package in packages:\n    try:\n        __import__(package)\n        print(f\"{package} already installed\")\n    except ImportError:\n        print(f\"Installing {package}...\")\n        subprocess.check_call([sys.executable, \"-m\", \"pip\", \"install\", package])\n        print(f\"{package} installed successfully!\")\n\nprint(\"All packages ready!\")",
+      "reads": [
+        "sys",
+        "__import__",
+        "subprocess",
+        "print",
+        "ImportError"
+      ],
+      "writes": [
+        "package",
+        "packages",
+        "subprocess",
+        "sys"
+      ]
+    },
+    {
+      "id": "24b5a3e3-9abb-4471-8db0-2adcc61cf56f",
+      "type": "python",
+      "code": "# Import necessary libraries\nimport yfinance as yf\nimport pandas as pd\nimport plotly.graph_objects as go\nimport plotly.express as px\nfrom plotly.subplots import make_subplots\nimport numpy as np\nfrom datetime import datetime, timedelta\n\nprint(\"Libraries imported successfully!\")",
+      "reads": [
+        "print"
+      ],
+      "writes": [
+        "pd",
+        "timedelta",
+        "datetime",
+        "go",
+        "np",
+        "make_subplots",
+        "px",
+        "yf"
+      ]
+    },
+    {
+      "id": "446a4db2-7ffa-4463-adb6-d46c76cd2077",
+      "type": "python",
+      "code": "# Fetch Apple stock data\nticker = \"AAPL\"\napple = yf.Ticker(ticker)\n\n# Get 2 years of historical data\nend_date = datetime.now()\nstart_date = end_date - timedelta(days=730)  # ~2 years\n\nprint(f\"Fetching {ticker} stock data from {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}...\")\nstock_data = apple.history(start=start_date, end=end_date)\n\nprint(f\"Data fetched successfully! Shape: {stock_data.shape}\")\nprint(\"\\nFirst few rows:\")\nprint(stock_data.head())",
+      "reads": [
+        "print",
+        "yf",
+        "timedelta",
+        "datetime"
+      ],
+      "writes": [
+        "end_date",
+        "stock_data",
+        "start_date",
+        "ticker",
+        "apple"
+      ]
+    },
+    {
+      "id": "e1728abd-a000-419d-a58a-807399bc78ca",
+      "type": "python",
+      "code": "# Basic statistics and data overview\nprint(\"=== STOCK DATA OVERVIEW ===\")\nprint(f\"Ticker: {ticker}\")\nprint(f\"Data Range: {stock_data.index[0].strftime('%Y-%m-%d')} to {stock_data.index[-1].strftime('%Y-%m-%d')}\")\nprint(f\"Number of trading days: {len(stock_data)}\")\n\nprint(\"\\n=== PRICE STATISTICS ===\")\nprint(f\"Current Price: ${stock_data['Close'][-1]:.2f}\")\nprint(f\"52-week High: ${stock_data['High'].max():.2f}\")\nprint(f\"52-week Low: ${stock_data['Low'].min():.2f}\")\nprint(f\"Average Volume: {stock_data['Volume'].mean():,.0f}\")\n\nprint(\"\\n=== RETURNS ANALYSIS ===\")\n# Calculate daily returns\nstock_data['Daily_Return'] = stock_data['Close'].pct_change()\ntotal_return = ((stock_data['Close'][-1] / stock_data['Close'][0]) - 1) * 100\nannual_return = total_return / 2  # Approximate for 2 years\n\nprint(f\"Total Return (2 years): {total_return:.2f}%\")\nprint(f\"Annualized Return: {annual_return:.2f}%\")\nprint(f\"Daily Volatility: {stock_data['Daily_Return'].std():.4f}\")\nprint(f\"Best Day: {stock_data['Daily_Return'].max():.4f} ({stock_data['Daily_Return'].max()*100:.2f}%)\")\nprint(f\"Worst Day: {stock_data['Daily_Return'].min():.4f} ({stock_data['Daily_Return'].min()*100:.2f}%)\")",
+      "reads": [
+        "print",
+        "len",
+        "stock_data",
+        "ticker"
+      ],
+      "writes": [
+        "total_return",
+        "annual_return"
+      ]
+    },
+    {
+      "id": "03d37232-8fb9-42d8-84f7-03da76523fb9",
+      "type": "python",
+      "code": "# Create a comprehensive price chart with volume\nfig = make_subplots(rows=2, cols=1, \n                    row_heights=[0.7, 0.3],\n                    vertical_spacing=0.05,\n                    subplot_titles=('Stock Price (OHLC)', 'Volume'))\n\n# Candlestick chart\nfig.add_trace(go.Candlestick(x=stock_data.index,\n                            open=stock_data['Open'],\n                            high=stock_data['High'],\n                            low=stock_data['Low'],\n                            close=stock_data['Close'],\n                            name='OHLC'),\n              row=1, col=1)\n\n# Volume chart\nfig.add_trace(go.Bar(x=stock_data.index,\n                     y=stock_data['Volume'],\n                     name='Volume',\n                     marker_color='rgba(158,202,225,0.6)'),\n              row=2, col=1)\n\n# Add moving averages\nstock_data['MA20'] = stock_data['Close'].rolling(window=20).mean()\nstock_data['MA50'] = stock_data['Close'].rolling(window=50).mean()\n\nfig.add_trace(go.Scatter(x=stock_data.index, \n                         y=stock_data['MA20'],\n                         name='20-day MA',\n                         line=dict(color='orange', width=2)),\n              row=1, col=1)\n\nfig.add_trace(go.Scatter(x=stock_data.index, \n                         y=stock_data['MA50'],\n                         name='50-day MA',\n                         line=dict(color='red', width=2)),\n              row=1, col=1)\n\nfig.update_layout(\n    title=f'{ticker} Stock Analysis - Price and Volume',\n    yaxis_title='Price ($)',\n    yaxis2_title='Volume',\n    height=700,\n    xaxis_rangeslider_visible=False\n)\n\nfig",
+      "reads": [
+        "stock_data",
+        "go",
+        "make_subplots",
+        "dict",
+        "ticker"
+      ],
+      "writes": [
+        "fig"
+      ]
+    },
+    {
+      "id": "098746ce-66d7-4ac6-be14-942f4a198e6a",
+      "type": "python",
+      "code": "# Technical indicators analysis\nprint(\"=== TECHNICAL INDICATORS ===\")\n\n# RSI (Relative Strength Index)\ndef calculate_rsi(prices, window=14):\n    delta = prices.diff()\n    gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()\n    loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()\n    rs = gain / loss\n    rsi = 100 - (100 / (1 + rs))\n    return rsi\n\nstock_data['RSI'] = calculate_rsi(stock_data['Close'])\ncurrent_rsi = stock_data['RSI'][-1]\nprint(f\"Current RSI: {current_rsi:.2f}\")\n\nif current_rsi > 70:\n    print(\"RSI Signal: Overbought territory\")\nelif current_rsi < 30:\n    print(\"RSI Signal: Oversold territory\")\nelse:\n    print(\"RSI Signal: Neutral territory\")\n\n# Bollinger Bands\nstock_data['BB_Middle'] = stock_data['Close'].rolling(window=20).mean()\nstock_data['BB_Std'] = stock_data['Close'].rolling(window=20).std()\nstock_data['BB_Upper'] = stock_data['BB_Middle'] + (stock_data['BB_Std'] * 2)\nstock_data['BB_Lower'] = stock_data['BB_Middle'] - (stock_data['BB_Std'] * 2)\n\ncurrent_price = stock_data['Close'][-1]\ncurrent_upper = stock_data['BB_Upper'][-1]\ncurrent_lower = stock_data['BB_Lower'][-1]\n\nprint(f\"\\nBollinger Bands:\")\nprint(f\"Upper Band: ${current_upper:.2f}\")\nprint(f\"Current Price: ${current_price:.2f}\")\nprint(f\"Lower Band: ${current_lower:.2f}\")\n\nif current_price > current_upper:\n    print(\"BB Signal: Price above upper band (potentially overbought)\")\nelif current_price < current_lower:\n    print(\"BB Signal: Price below lower band (potentially oversold)\")\nelse:\n    print(\"BB Signal: Price within normal range\")\n\n# Moving average crossover signals\nma20_current = stock_data['MA20'][-1]\nma50_current = stock_data['MA50'][-1]\nprint(f\"\\nMoving Average Analysis:\")\nprint(f\"20-day MA: ${ma20_current:.2f}\")\nprint(f\"50-day MA: ${ma50_current:.2f}\")\n\nif ma20_current > ma50_current:\n    print(\"MA Signal: Bullish (20MA > 50MA)\")\nelse:\n    print(\"MA Signal: Bearish (20MA < 50MA)\")",
+      "reads": [
+        "print",
+        "calculate_rsi",
+        "stock_data"
+      ],
+      "writes": [
+        "current_upper",
+        "current_lower",
+        "current_rsi",
+        "ma50_current",
+        "ma20_current",
+        "current_price",
+        "calculate_rsi"
+      ]
+    },
+    {
+      "id": "839b9ea5-034d-47e2-8823-53677c606a34",
+      "type": "python",
+      "code": "# Daily returns distribution and volatility analysis\nfig = make_subplots(rows=2, cols=2,\n                    subplot_titles=('Daily Returns Distribution', 'Cumulative Returns', \n                                  'Rolling 30-day Volatility', 'Monthly Returns Heatmap'))\n\n# Returns histogram\nfig.add_trace(go.Histogram(x=stock_data['Daily_Return'].dropna(),\n                          nbinsx=50,\n                          name='Daily Returns',\n                          marker_color='lightblue'),\n              row=1, col=1)\n\n# Cumulative returns\nstock_data['Cumulative_Return'] = (1 + stock_data['Daily_Return']).cumprod()\nfig.add_trace(go.Scatter(x=stock_data.index,\n                        y=stock_data['Cumulative_Return'],\n                        name='Cumulative Returns',\n                        line=dict(color='green', width=2)),\n              row=1, col=2)\n\n# Rolling volatility (30-day)\nstock_data['Rolling_Vol'] = stock_data['Daily_Return'].rolling(window=30).std() * np.sqrt(252)  # Annualized\nfig.add_trace(go.Scatter(x=stock_data.index,\n                        y=stock_data['Rolling_Vol'],\n                        name='30-day Volatility',\n                        line=dict(color='red', width=2)),\n              row=2, col=1)\n\n# Monthly returns heatmap data\nstock_data['Year'] = stock_data.index.year\nstock_data['Month'] = stock_data.index.month\nmonthly_returns = stock_data.groupby(['Year', 'Month'])['Daily_Return'].apply(lambda x: (1+x).prod()-1)\nmonthly_pivot = monthly_returns.unstack(level=1)\n\n# Create heatmap\nfig.add_trace(go.Heatmap(z=monthly_pivot.values * 100,\n                        x=[f'Month {i}' for i in range(1, 13)],\n                        y=monthly_pivot.index.astype(str),\n                        colorscale='RdYlGn',\n                        zmid=0,\n                        name='Monthly Returns %'),\n              row=2, col=2)\n\nfig.update_layout(height=800, \n                 title=f'{ticker} Returns and Volatility Analysis',\n                 showlegend=False)\n\n\n\n# Print statistics\nprint(f\"=== RETURN STATISTICS ===\")\nprint(f\"Mean Daily Return: {stock_data['Daily_Return'].mean()*100:.3f}%\")\nprint(f\"Daily Return Std Dev: {stock_data['Daily_Return'].std()*100:.3f}%\")\nprint(f\"Sharpe Ratio (approx): {(stock_data['Daily_Return'].mean() / stock_data['Daily_Return'].std()) * np.sqrt(252):.2f}\")\nprint(f\"Current Annualized Volatility: {stock_data['Rolling_Vol'][-1]:.2f}%\")\nfig",
+      "reads": [
+        "stock_data",
+        "str",
+        "x",
+        "go",
+        "print",
+        "i",
+        "make_subplots",
+        "np",
+        "dict",
+        "range",
+        "ticker"
+      ],
+      "writes": [
+        "fig",
+        "monthly_pivot",
+        "i",
+        "monthly_returns"
+      ]
+    },
+    {
+      "id": "f7b8976d-4a12-4080-afc8-8856332780dc",
+      "type": "python",
+      "code": "# Company fundamentals and key metrics\nprint(\"=== COMPANY FUNDAMENTALS ===\")\n\n# Get company info\ninfo = apple.info\n\n# Key metrics\nprint(f\"Company: {info.get('longName', 'N/A')}\")\nprint(f\"Sector: {info.get('sector', 'N/A')}\")\nprint(f\"Industry: {info.get('industry', 'N/A')}\")\nprint(f\"Market Cap: ${info.get('marketCap', 0):,}\")\nprint(f\"Enterprise Value: ${info.get('enterpriseValue', 0):,}\")\n\nprint(f\"\\n=== VALUATION METRICS ===\")\nprint(f\"P/E Ratio: {info.get('trailingPE', 'N/A')}\")\nprint(f\"Forward P/E: {info.get('forwardPE', 'N/A')}\")\nprint(f\"PEG Ratio: {info.get('pegRatio', 'N/A')}\")\nprint(f\"Price-to-Book: {info.get('priceToBook', 'N/A')}\")\nprint(f\"Price-to-Sales: {info.get('priceToSalesTrailing12Months', 'N/A')}\")\n\nprint(f\"\\n=== FINANCIAL HEALTH ===\")\nprint(f\"Current Ratio: {info.get('currentRatio', 'N/A')}\")\nprint(f\"Debt-to-Equity: {info.get('debtToEquity', 'N/A')}\")\nprint(f\"Return on Equity: {info.get('returnOnEquity', 'N/A')}\")\nprint(f\"Return on Assets: {info.get('returnOnAssets', 'N/A')}\")\n\nprint(f\"\\n=== DIVIDEND INFO ===\")\nprint(f\"Dividend Yield: {info.get('dividendYield', 0)*100:.2f}%\" if info.get('dividendYield') else \"Dividend Yield: N/A\")\nprint(f\"Dividend Rate: ${info.get('dividendRate', 'N/A')}\")\nprint(f\"Payout Ratio: {info.get('payoutRatio', 'N/A')}\")\n\nprint(f\"\\n=== ANALYST RECOMMENDATIONS ===\")\nprint(f\"Analyst Target Price: ${info.get('targetMeanPrice', 'N/A')}\")\nprint(f\"Recommendation: {info.get('recommendationKey', 'N/A')}\")",
+      "reads": [
+        "print",
+        "apple"
+      ],
+      "writes": [
+        "info"
+      ]
+    }
+  ]
+}

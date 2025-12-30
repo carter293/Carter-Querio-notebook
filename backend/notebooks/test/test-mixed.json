@@ -1,0 +1,71 @@
+{
+  "id": "test-mixed",
+  "name": "Test Notebook",
+  "db_conn_string": null,
+  "revision": 13,
+  "cells": [
+    {
+      "id": "30e3c217-6e13-481d-8678-7f6e25130732",
+      "type": "python",
+      "code": "x3 = 3",
+      "reads": [],
+      "writes": [
+        "x3"
+      ]
+    },
+    {
+      "id": "30f04be4-6a62-402d-b92b-7f27727a1c8e",
+      "type": "python",
+      "code": "x4 = 4",
+      "reads": [],
+      "writes": [
+        "x4"
+      ]
+    },
+    {
+      "id": "300732d0-8306-4c49-9c45-3962447d5c11",
+      "type": "python",
+      "code": "y5 = 5",
+      "reads": [],
+      "writes": [
+        "y5"
+      ]
+    },
+    {
+      "id": "a1137291-a20c-4b61-997b-b9bf3af5d44a",
+      "type": "python",
+      "code": "y6 = 6",
+      "reads": [],
+      "writes": [
+        "y6"
+      ]
+    },
+    {
+      "id": "7f8edc5f-e42d-401d-a68f-0d7037002fe8",
+      "type": "python",
+      "code": "y7 = 7",
+      "reads": [],
+      "writes": [
+        "y7"
+      ]
+    },
+    {
+      "id": "c5bff13d-b376-4170-b310-ad2d6f131bed",
+      "type": "python",
+      "code": "y8 = 8",
+      "reads": [],
+      "writes": [
+        "y8"
+      ]
+    },
+    {
+      "id": "0fa8beee-7b5a-4fb0-86ae-5c62f8f86f68",
+      "type": "python",
+      "code": "y9 = 9",
+      "reads": [],
+      "writes": [
+        "y9"
+      ]
+    }
+  ]
+}

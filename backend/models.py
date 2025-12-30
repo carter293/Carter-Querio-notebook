@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Optional, Dict, Set, List, Union, Any
 from enum import Enum
+from asyncio import Lock
 
 class CellType(str, Enum):
     PYTHON = "python"
@@ -84,3 +85,5 @@ class Notebook:
     graph: Graph = field(default_factory=Graph)
     kernel: KernelState = field(default_factory=KernelState)
     revision: int = 0
+    # Lock for concurrency control (not serialized)
+    _lock: Lock = field(default_factory=Lock, init=False, repr=False, compare=False)

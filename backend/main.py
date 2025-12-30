@@ -1,5 +1,6 @@
 import os
 import httpx
+from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, HTTPException, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from clerk_backend_api import Clerk
@@ -7,7 +8,9 @@ from clerk_backend_api.security import authenticate_request
 from clerk_backend_api.security.types import AuthenticateRequestOptions
 from routes import router, NOTEBOOKS
 from storage import list_notebooks, load_notebook, save_notebook
-from demo_notebook import create_demo_notebook
+from chat import router as chat_router
+
+load_dotenv(override=True)
 
 app = FastAPI(title="Reactive Notebook")
 
@@ -145,6 +148,7 @@ async def startup_event():
         print("No notebooks found. Users will create their own.")
 
 app.include_router(router, prefix="/api")
+app.include_router(chat_router, prefix="/api", tags=["chat"])
 
 @app.get("/health")
 async def health():

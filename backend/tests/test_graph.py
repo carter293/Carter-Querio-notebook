@@ -9,7 +9,7 @@ from models import Notebook, Cell, CellType, Graph
 from graph import rebuild_graph, detect_cycle, topological_sort, get_all_dependents
 
 def test_rebuild_graph_simple():
-    nb = Notebook(id="test")
+    nb = Notebook(id="test", user_id="test-user")
 
     cell_a = Cell(id="a", type=CellType.PYTHON, code="x = 1")
     cell_a.writes = {'x'}
@@ -24,7 +24,7 @@ def test_rebuild_graph_simple():
     assert 'b' in nb.graph.edges['a']
 
 def test_rebuild_graph_multiple_deps():
-    nb = Notebook(id="test")
+    nb = Notebook(id="test", user_id="test-user")
 
     cell_a = Cell(id="a", type=CellType.PYTHON, code="x = 1")
     cell_a.writes = {'x'}
@@ -43,7 +43,7 @@ def test_rebuild_graph_multiple_deps():
     assert 'c' in nb.graph.edges['b']
 
 def test_detect_cycle_simple():
-    nb = Notebook(id="test")
+    nb = Notebook(id="test", user_id="test-user")
 
     cell_a = Cell(id="a", type=CellType.PYTHON, code="")
     cell_b = Cell(id="b", type=CellType.PYTHON, code="")
@@ -56,7 +56,7 @@ def test_detect_cycle_simple():
     assert cycle is not None
 
 def test_detect_cycle_none():
-    nb = Notebook(id="test")
+    nb = Notebook(id="test", user_id="test-user")
 
     cell_a = Cell(id="a", type=CellType.PYTHON, code="")
     cell_b = Cell(id="b", type=CellType.PYTHON, code="")
@@ -68,7 +68,7 @@ def test_detect_cycle_none():
     assert cycle is None
 
 def test_topological_sort_linear():
-    nb = Notebook(id="test")
+    nb = Notebook(id="test", user_id="test-user")
     nb.graph.add_edge('a', 'b')
     nb.graph.add_edge('b', 'c')
 
@@ -79,7 +79,7 @@ def test_topological_sort_linear():
     assert result.index('b') < result.index('c')
 
 def test_topological_sort_diamond():
-    nb = Notebook(id="test")
+    nb = Notebook(id="test", user_id="test-user")
     nb.graph.add_edge('a', 'b')
     nb.graph.add_edge('a', 'c')
     nb.graph.add_edge('b', 'd')
@@ -95,7 +95,7 @@ def test_topological_sort_diamond():
     assert result.index('c') < result.index('d')
 
 def test_topological_sort_cycle():
-    nb = Notebook(id="test")
+    nb = Notebook(id="test", user_id="test-user")
     nb.graph.add_edge('a', 'b')
     nb.graph.add_edge('b', 'a')
 
@@ -103,7 +103,7 @@ def test_topological_sort_cycle():
         topological_sort(nb.graph, {'a', 'b'})
 
 def test_get_all_dependents_linear():
-    nb = Notebook(id="test")
+    nb = Notebook(id="test", user_id="test-user")
     nb.graph.add_edge('a', 'b')
     nb.graph.add_edge('b', 'c')
 
@@ -111,7 +111,7 @@ def test_get_all_dependents_linear():
     assert deps == {'b', 'c'}
 
 def test_get_all_dependents_diamond():
-    nb = Notebook(id="test")
+    nb = Notebook(id="test", user_id="test-user")
     nb.graph.add_edge('a', 'b')
     nb.graph.add_edge('b', 'c')
     nb.graph.add_edge('a', 'd')
@@ -120,7 +120,7 @@ def test_get_all_dependents_diamond():
     assert deps == {'b', 'c', 'd'}
 
 def test_get_all_dependents_none():
-    nb = Notebook(id="test")
+    nb = Notebook(id="test", user_id="test-user")
     nb.graph.add_edge('a', 'b')
 
     deps = get_all_dependents(nb.graph, 'b')

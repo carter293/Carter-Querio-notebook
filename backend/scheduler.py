@@ -42,64 +42,70 @@ class ExecutionScheduler:
             )
 
     async def _drain_queue(self, notebook_id: str, notebook, broadcaster):
-        """Process all pending runs"""
+        """Process all pending runs with proper locking."""
         from graph import topological_sort, get_all_dependents
         from models import CellStatus
 
         while True:
+            # Get pending cells (uses scheduler's own lock)
             lock = self.get_lock(notebook_id)
             async with lock:
                 if not self.pending_runs.get(notebook_id):
-                    # Queue empty
                     break
-
-                # Get all pending cells
                 pending_cells = self.pending_runs[notebook_id].copy()
                 self.pending_runs[notebook_id].clear()
-
-            # Compute transitive closure (all cells to run)
-            all_to_run = set(pending_cells)
-            for cell_id in pending_cells:
-                dependents = get_all_dependents(notebook.graph, cell_id)
-                all_to_run.update(dependents)
-
-            # Topological sort
-            try:
-                sorted_cells = topological_sort(notebook.graph, all_to_run)
-            except ValueError:
-                # Cycle detected - mark all as error
-                for cell_id in all_to_run:
+            
+            # Acquire notebook lock to read graph and plan execution
+            async with notebook._lock:
+                # Expand to include all dependents
+                all_to_run = set(pending_cells)
+                for cell_id in pending_cells:
+                    dependents = get_all_dependents(notebook.graph, cell_id)
+                    all_to_run.update(dependents)
+                
+                # Topological sort
+                try:
+                    sorted_cells = topological_sort(notebook.graph, all_to_run)
+                except ValueError as e:
+                    # Cycle detected
+                    for cell_id in all_to_run:
+                        cell = self._get_cell(notebook, cell_id)
+                        if cell:
+                            cell.status = CellStatus.ERROR
+                            cell.error = f"Dependency cycle: {str(e)}"
+                            await broadcaster.broadcast_cell_status(notebook_id, cell_id, CellStatus.ERROR.value)
+                            await broadcaster.broadcast_cell_error(notebook_id, cell_id, cell.error)
+                    continue
+                
+                # Create snapshot of cells to execute (copy cell data)
+                cells_to_execute = []
+                for cell_id in sorted_cells:
                     cell = self._get_cell(notebook, cell_id)
                     if cell:
-                        cell.status = CellStatus.ERROR
-                        cell.error = "Cycle detected in dependency graph"
-                        await broadcaster.broadcast_cell_status(notebook_id, cell_id, CellStatus.ERROR)
-                        await broadcaster.broadcast_cell_error(notebook_id, cell_id, cell.error)
-                continue
-
-            # Execute in order
-            for cell_id in sorted_cells:
-                cell = self._get_cell(notebook, cell_id)
-                if not cell:
-                    continue
-
-                # Check if upstream dependency failed
-                has_failed_dependency = False
-                if cell_id in notebook.graph.reverse_edges:
-                    for dep_id in notebook.graph.reverse_edges[cell_id]:
-                        dep_cell = self._get_cell(notebook, dep_id)
-                        if dep_cell and dep_cell.status == CellStatus.ERROR:
-                            has_failed_dependency = True
-                            break
-
-                if has_failed_dependency:
-                    # Mark as blocked
-                    cell.status = CellStatus.BLOCKED
-                    await broadcaster.broadcast_cell_status(notebook_id, cell_id, CellStatus.BLOCKED)
-                    continue
-
-                # Execute cell
-                await self._execute_cell(notebook_id, cell, notebook, broadcaster)
+                        cells_to_execute.append({
+                            "id": cell.id,
+                            "code": cell.code,
+                            "type": cell.type
+                        })
+            
+            # Execute cells (releases lock during execution to allow reads)
+            for cell_data in cells_to_execute:
+                # Get fresh reference to cell (it may have been modified)
+                cell = self._get_cell(notebook, cell_data["id"])
+                if cell:
+                    # Check if dependencies failed
+                    async with notebook._lock:
+                        deps = notebook.graph.reverse_edges.get(cell.id, set())
+                        failed_deps = [
+                            dep_id for dep_id in deps
+                            if any(c.id == dep_id and c.status == CellStatus.ERROR for c in notebook.cells)
+                        ]
+                    
+                    if failed_deps:
+                        cell.status = CellStatus.BLOCKED
+                        await broadcaster.broadcast_cell_status(notebook_id, cell.id, CellStatus.BLOCKED.value)
+                    else:
+                        await self._execute_cell(notebook_id, cell, notebook, broadcaster)
 
     async def _execute_cell(self, notebook_id: str, cell, notebook, broadcaster):
         """Execute a single cell and broadcast results"""
