@@ -41,6 +41,7 @@ aws dynamodb create-table \
   --billing-mode PAY_PER_REQUEST \
   --global-secondary-indexes \
     "IndexName=NotebookByIdIndex,KeySchema=[{AttributeName=notebook_id,KeyType=HASH}],Projection={ProjectionType=ALL}" \
+  --region eu-north-1 \
   --endpoint-url http://localhost:8000 \
   > /dev/null 2>&1
 
@@ -51,7 +52,7 @@ echo "✅ Local DynamoDB setup complete!"
 echo
 echo "Environment variables to use:"
 echo "  export DYNAMODB_TABLE_NAME=reactive-notebook-notebooks-local"
-echo "  export AWS_REGION=us-east-1"
+echo "  export AWS_REGION=eu-north-1"
 echo "  export AWS_ACCESS_KEY_ID=fakeMyKeyId"
 echo "  export AWS_SECRET_ACCESS_KEY=fakeSecretAccessKey"
 echo "  export AWS_ENDPOINT_URL=http://localhost:8000"

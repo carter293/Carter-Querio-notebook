@@ -9,7 +9,7 @@ from routes import router, NOTEBOOKS
 from storage import list_notebooks, load_notebook, save_notebook, DYNAMODB_ENABLED
 from chat import router as chat_router
 
-load_dotenv(override=True)
+load_dotenv()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

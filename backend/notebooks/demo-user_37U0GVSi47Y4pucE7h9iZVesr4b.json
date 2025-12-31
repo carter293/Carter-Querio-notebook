@@ -16,8 +16,8 @@
         "time"
       ],
       "writes": [
-        "time",
-        "x"
+        "x",
+        "time"
       ]
     },
     {
@@ -104,8 +104,8 @@
         "pd"
       ],
       "writes": [
-        "pd",
-        "df"
+        "df",
+        "pd"
       ]
     },
     {
@@ -1018,12 +1018,12 @@
       "error": null,
       "reads": [
         "x",
-        "px",
-        "df"
+        "df",
+        "px"
       ],
       "writes": [
-        "fig",
-        "px"
+        "px",
+        "fig"
       ]
     },
     {
@@ -1114,8 +1114,8 @@
       ],
       "error": null,
       "reads": [
-        "df",
-        "alt"
+        "alt",
+        "df"
       ],
       "writes": [
         "chart",

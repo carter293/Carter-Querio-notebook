@@ -40,7 +40,6 @@ export function useNotebookWebSocket(
   const didUnmount = useRef(false);
   const isAuthenticated = useRef(false);
   const tokenRef = useRef(token);
-  const messageQueue = useRef<object[]>([]);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected');
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
   
@@ -77,14 +76,6 @@ export function useNotebookWebSocket(
           console.log('WebSocket authenticated successfully');
           isAuthenticated.current = true;
           setConnectionStatus('connected');
-          
-          // Flush message queue
-          if (messageQueue.current.length > 0) {
-            console.log(`Flushing ${messageQueue.current.length} queued messages...`);
-            const queue = [...messageQueue.current];
-            messageQueue.current = [];
-            queue.forEach(msg => sendJsonMessage(msg));
-          }
           return;
         }
 
@@ -157,8 +148,7 @@ export function useNotebookWebSocket(
     if (readyState === ReadyState.OPEN && isAuthenticated.current) {
       sendJsonMessage({ type: 'run_cell', cellId });
     } else {
-      console.warn('WebSocket not ready, queueing cell execution for:', cellId);
-      messageQueue.current.push({ type: 'run_cell', cellId });
+      console.warn('WebSocket not ready, cannot run cell:', cellId);
     }
   }, [readyState, sendJsonMessage]);
 
@@ -167,8 +157,7 @@ export function useNotebookWebSocket(
     if (readyState === ReadyState.OPEN && isAuthenticated.current) {
       sendJsonMessage(message);
     } else {
-      console.warn('WebSocket not connected, queueing message:', message);
-      messageQueue.current.push(message);
+      console.warn('WebSocket not connected, cannot send message:', message);
     }
   }, [readyState, sendJsonMessage]);
 
@@ -179,7 +168,6 @@ export function useNotebookWebSocket(
     readyState,
     connectionStatus,
     reconnectAttempt,
-    queuedMessages: messageQueue.current.length,
   };
 }
 

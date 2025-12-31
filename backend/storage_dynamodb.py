@@ -20,6 +20,38 @@ class DecimalEncoder(json.JSONEncoder):
         return super().default(obj)
 
 
+def convert_floats_to_decimal(obj: Any) -> Any:
+    """
+    Recursively convert all float values to Decimal for DynamoDB compatibility.
+    DynamoDB does not support Python float types.
+    """
+    if isinstance(obj, float):
+        return Decimal(str(obj))
+    elif isinstance(obj, dict):
+        return {k: convert_floats_to_decimal(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_floats_to_decimal(item) for item in obj]
+    elif isinstance(obj, tuple):
+        return tuple(convert_floats_to_decimal(item) for item in obj)
+    return obj
+
+
+def convert_decimal_to_float(obj: Any) -> Any:
+    """
+    Recursively convert all Decimal values back to float.
+    Used when loading data from DynamoDB.
+    """
+    if isinstance(obj, Decimal):
+        return float(obj)
+    elif isinstance(obj, dict):
+        return {k: convert_decimal_to_float(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_decimal_to_float(item) for item in obj]
+    elif isinstance(obj, tuple):
+        return tuple(convert_decimal_to_float(item) for item in obj)
+    return obj
+
+
 class DynamoDBStorage:
     """Fast, serverless notebook storage using DynamoDB."""
     
@@ -92,6 +124,9 @@ class DynamoDBStorage:
             except Exception:
                 # If any error, treat as new notebook
                 item['created_at'] = datetime.now(timezone.utc).isoformat()
+            
+            # Convert all floats to Decimal for DynamoDB compatibility
+            item = convert_floats_to_decimal(item)
             
             # Save item
             await table.put_item(Item=item)
@@ -188,6 +223,9 @@ class DynamoDBStorage:
     
     def _deserialize_notebook(self, item: Dict[str, Any]) -> Notebook:
         """Convert DynamoDB item to Notebook object."""
+        # Convert all Decimal values back to float
+        item = convert_decimal_to_float(item)
+        
         cells = [
             Cell(
                 id=cell_data['id'],

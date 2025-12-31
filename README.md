@@ -1,394 +1,229 @@
 # Reactive Notebook
 
-A reactive notebook interface where code cells automatically re-execute when their dependencies change. Built for the Querio take-home challenge.
-
-## Features
-
-- **Reactive Execution**: Edit a cell and dependent cells automatically re-run
-- **Python + SQL Support**: Mix Python logic with database queries
-- **Real-time Updates**: WebSocket streaming shows execution status live
-- **Dependency Tracking**: Static AST analysis builds accurate dependency graph
-- **Error Handling**: Clear error messages, blocked state for failed dependencies
-- **Template Variables**: Use Python variables in SQL with `{variable}` syntax
-- **Cycle Detection**: Circular dependencies are automatically detected and reported
-
-## Quick Start
-
-### Prerequisites
-
-- Python 3.11+
-- Node.js 18+
-- PostgreSQL (optional, for SQL cells)
-
-### Backend Setup
-
-```bash
-# Install Python dependencies
-pip install -r requirements.txt
-
-# Start the backend server
-cd backend
-python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
-
-# Or use the main.py directly
-python main.py
-```
-
-Backend runs on `http://localhost:8000`
-
-### Frontend Setup
-
-```bash
-# Install Node dependencies
-cd frontend
-npm install
-
-# Start the development server
-npm run dev
-```
-
-Frontend runs on `http://localhost:3000`
-
-### API Client Generation
-
-The TypeScript API client is automatically generated from the FastAPI OpenAPI specification using [@hey-api/openapi-ts](https://github.com/hey-api/openapi-ts).
-
-#### Regenerating the Client
-
-1. Start the backend server:
-   ```bash
-   cd backend && python main.py
-   ```
-
-2. Generate the client:
-   ```bash
-   cd frontend && npm run generate:api
-   ```
-
-3. The generated client will be in `frontend/src/client/`
-
-#### When to Regenerate
-
-- After adding new API endpoints
-- After modifying request/response models
-- After updating FastAPI route definitions
-
-#### Using Static OpenAPI File (for CI/CD)
-
-Instead of fetching from running server, you can export the OpenAPI spec:
-
-```bash
-cd backend && python export_openapi.py
-```
-
-Then update `frontend/openapi-ts.config.ts` to use the file:
-
-```typescript
-input: '../openapi.json', // Relative to frontend directory
-```
-
-### Running Tests
-
-```bash
-# Run backend tests
-pytest backend/tests/ -v
-
-# The core AST parser and graph tests should pass
-# (Note: async executor tests require pytest-asyncio configuration)
-```
+Reactive notebook with dependency-driven cell execution. Built with FastAPI, React, and deployed on AWS.
 
 ## Architecture
 
-### Backend (FastAPI + Python)
+**Backend:** FastAPI + AsyncIO  
+**Frontend:** React + TypeScript + Vite  
+**Auth:** Clerk (JWT with JWKS verification)  
+**Storage:** DynamoDB  
+**Infrastructure:** AWS ECS Fargate, ALB, CloudFront, S3  
+**IaC:** Terraform with modular structure
 
-- **models.py**: Data structures (Notebook, Cell, Graph, KernelState)
-- **ast_parser.py**: Static dependency extraction via Python AST
-- **graph.py**: DAG construction, cycle detection, topological sort
-- **executor.py**: Python/SQL execution engines
-- **scheduler.py**: Reactive execution queue with dependency tracking
-- **websocket.py**: Real-time event broadcasting
-- **routes.py**: HTTP API endpoints and WebSocket handler
-- **main.py**: FastAPI application entry point
+### Core Components
 
-### Frontend (React + TypeScript)
+- **AST Parser** (`ast_parser.py`) - Extracts reads/writes from Python, templates from SQL
+- **Dependency Graph** (`graph.py`) - DAG construction, topological sort, cycle detection
+- **Executor** (`executor.py`) - Python/SQL execution with output capture
+- **Scheduler** (`scheduler.py`) - Reactive execution queue with concurrency control
+- **WebSocket Broadcaster** (`websocket.py`) - Real-time cell updates to all clients
 
-- **Cell.tsx**: Individual cell component with Monaco editor
-- **Notebook.tsx**: Notebook container with WebSocket integration
-- **App.tsx**: Main application component
-- **api-client.ts**: Generated API client wrapper with type definitions (uses OpenAPI-generated client)
-- **useWebSocket.ts**: WebSocket hook for live updates
+### Execution Model
 
-## How It Works
+1. User edits cell → AST parser extracts dependencies
+2. Graph rebuilt with new edges (writer → reader)
+3. Cell queued for execution → all dependents found via DFS
+4. Topological sort ensures correct execution order
+5. Results broadcasted via WebSocket
 
-1. **User edits cell code** → Frontend calls `PUT /api/notebooks/{id}/cells/{cell_id}`
-2. **Backend extracts dependencies** → AST parser finds reads/writes
-3. **Graph is rebuilt** → Edges created between cells with matching variables
-4. **User runs cell** → WebSocket message `{"type": "run_cell", "cellId": "..."}`
-5. **Scheduler executes** → Cell + all dependents in topological order
-6. **Results stream back** → WebSocket broadcasts status/output/errors
-7. **Frontend updates** → UI shows live execution state
+## Quick Start
 
-## Dependency Extraction
+### Local Development
 
-### Python Cells
+```bash
+# Backend
+cd backend
+pip install -r requirements.txt
+python main.py  # runs on :8000
 
-```python
-x = 10          # writes: {x}
-y = x * 2       # reads: {x}, writes: {y}
-z = y + x       # reads: {x, y}, writes: {z}
+# Frontend
+cd frontend
+npm install
+npm run dev  # runs on :5173
 ```
 
-Dependency graph: `x → y → z` (also `x → z`)
+### Environment Variables (Local Dev)
 
-### SQL Cells
+```bash
+# Backend
+export ANTHROPIC_API_KEY=sk-ant-api03...
+export CLERK_FRONTEND_API=modern-cricket-32.clerk.accounts.dev
 
-```sql
-SELECT * FROM users WHERE id = {user_id}
--- reads: {user_id}, writes: {}
+# Frontend
+export export VITE_CLERK_PUBLISHABLE_KEY=pk_test_b31aAd...
 ```
 
-SQL cells read Python variables via template syntax but don't write any.
+## Deployment
 
-## API Reference
+### Required Environment Variables
+
+```bash
+export TF_VAR_clerk_frontend_api=clerk.matthewcarter.info
+export TF_VAR_anthropic_api_key=sk-ant-api03...
+export CLERK_PUBLISHABLE_KEY=pk_live_...
+export AWS_ACCESS_KEY_ID=...
+export AWS_SECRET_ACCESS_KEY=...
+```
+
+### Deploy
+
+```bash
+# 1. Update infrastructure
+cd terraform && terraform apply -var-file=production.tfvars
+
+# 2. Deploy backend
+cd backend && ./scripts/deploy.sh
+
+# 3. Deploy frontend  
+cd frontend && ./deploy.sh
+```
+
+## API
 
 ### HTTP Endpoints
 
-- `POST /api/notebooks` - Create a new notebook
-- `GET /api/notebooks/{id}` - Get notebook details
-- `PUT /api/notebooks/{id}/db` - Update database connection string
-- `POST /api/notebooks/{id}/cells` - Create a new cell
+- `POST /api/notebooks` - Create notebook
+- `GET /api/notebooks` - List user's notebooks
+- `GET /api/notebooks/{id}` - Get notebook
+- `POST /api/notebooks/{id}/cells` - Create cell
 - `PUT /api/notebooks/{id}/cells/{cell_id}` - Update cell code
-- `DELETE /api/notebooks/{id}/cells/{cell_id}` - Delete a cell
+- `DELETE /api/notebooks/{id}/cells/{cell_id}` - Delete cell
 
 ### WebSocket
 
-- `WS /api/ws/notebooks/{id}` - Real-time updates
+- `WS /ws/notebooks/{id}` - Real-time updates
 
 **Client → Server:**
 ```json
+{"type": "authenticate", "token": "..."}
 {"type": "run_cell", "cellId": "..."}
 ```
 
 **Server → Client:**
 ```json
 {"type": "cell_status", "cellId": "...", "status": "running"}
-{"type": "cell_stdout", "cellId": "...", "data": "output"}
-{"type": "cell_result", "cellId": "...", "result": {...}}
-{"type": "cell_error", "cellId": "...", "error": "error message"}
+{"type": "cell_stdout", "cellId": "...", "data": "..."}
+{"type": "cell_output", "cellId": "...", "output": {...}}
+{"type": "cell_error", "cellId": "...", "error": "..."}
 ```
 
-## Usage Examples
+## Features
 
-### Basic Python Reactivity
+- **Reactive Execution** - Cells auto-rerun when dependencies change
+- **Dependency Tracking** - AST-based static analysis (Python) and template parsing (SQL)
+- **SQL Support** - Template variables: `SELECT * FROM users WHERE id = {user_id}`
+- **Real-time Updates** - WebSocket broadcasting for all cell events
+- **Cycle Detection** - Automatic detection and reporting of circular dependencies
+- **Multi-user** - Per-user notebooks with Clerk authentication
+- **Persistent Storage** - DynamoDB backend (falls back to file storage in dev)
 
-1. Create a Python cell:
-   ```python
-   x = 10
-   print(f"x = {x}")
-   ```
-   Run it → see output
+## Infrastructure
 
-2. Create another Python cell:
-   ```python
-   y = x * 2
-   print(f"y = {y}")
-   ```
-   Run it → see `y = 20`
+Modular Terraform configuration under `terraform/modules/`:
 
-3. Edit first cell to `x = 20` → second cell automatically reruns → see `y = 40`
+- **networking** - VPC, subnets, NAT, routing
+- **security** - Security groups, IAM roles, CloudWatch logs
+- **storage** - ECR (Docker), S3 (frontend), DynamoDB (notebooks)
+- **compute** - ECS Fargate cluster, ALB, task definitions
+- **cdn** - CloudFront distribution with custom domain support
+- **database** - DynamoDB table with CloudWatch alarms
 
-### SQL with Python Variables
+### AWS Resources
 
-1. Set database connection string in the UI
+- **Compute:** ECS Fargate (backend), S3 + CloudFront (frontend)
+- **Networking:** VPC with public/private subnets, NAT gateway, ALB
+- **Storage:** DynamoDB (notebooks), ECR (Docker images), S3 (static assets)
+- **Security:** IAM roles, security groups, ACM certificates
+- **Monitoring:** CloudWatch logs, DynamoDB alarms
 
-2. Create Python cell:
-   ```python
-   user_id = 5
-   ```
+## Testing
 
-3. Create SQL cell:
-   ```sql
-   SELECT * FROM users WHERE id = {user_id}
-   ```
+```bash
+# Backend tests
+cd backend
+pytest tests/ -v
 
-4. Run both → SQL query executes with `id = 5`
-
-5. Edit Python cell to `user_id = 10` → SQL cell auto-reruns with new value
-
-### Error Handling
-
-1. Create cell A: `x = 10`
-2. Create cell B: `y = x * 2`
-3. Create cell C: `z = y + x`
-
-4. Edit cell B to introduce error: `y = undefined_var`
-5. Run cell B → see error message
-6. Cell C shows "blocked" status (preserves last output)
-7. Fix cell B → cell C automatically recovers and reruns
-
-### Cycle Detection
-
-1. Create cell A: `x = y + 1` (reads: {y}, writes: {x})
-2. Create cell B: `y = x + 1` (reads: {x}, writes: {y})
-3. Both cells show error: "Circular dependency detected"
+# Core tests
+pytest tests/test_ast_parser.py tests/test_graph.py -v
+```
 
 ## Project Structure
 
 ```
-reactive-notebook/
 ├── backend/
-│   ├── __init__.py
-│   ├── main.py              # FastAPI app entry point
-│   ├── models.py            # Data models
-│   ├── ast_parser.py        # AST dependency extraction
-│   ├── graph.py             # DAG construction
-│   ├── executor.py          # Execution engines
-│   ├── scheduler.py         # Reactive scheduler
-│   ├── websocket.py         # WebSocket broadcaster
-│   ├── routes.py            # API endpoints
-│   ├── scripts/             # Operational scripts
-│   │   ├── deploy.sh        # Build & deploy to AWS ECS
-│   │   ├── docker-test.sh   # Test Docker image locally
-│   │   ├── health-check.sh  # Check deployed backend health
-│   │   └── update-service.sh # Force ECS service restart
-│   └── tests/
-│       ├── __init__.py
-│       ├── test_ast_parser.py
-│       ├── test_graph.py
-│       └── test_executor.py
+│   ├── main.py              # FastAPI app + Clerk JWT verification
+│   ├── models.py            # Pydantic models (Notebook, Cell, Graph)
+│   ├── ast_parser.py        # Dependency extraction
+│   ├── graph.py             # DAG + topological sort
+│   ├── executor.py          # Python/SQL execution
+│   ├── scheduler.py         # Reactive execution queue
+│   ├── websocket.py         # Real-time broadcaster
+│   ├── routes.py            # HTTP + WebSocket endpoints
+│   ├── storage.py           # File-based storage
+│   ├── storage_dynamodb.py  # DynamoDB storage
+│   └── scripts/
+│       ├── deploy.sh        # Build + push to ECR + update ECS
+│       └── update-service.sh
 ├── frontend/
 │   ├── src/
 │   │   ├── components/
-│   │   │   ├── Cell.tsx
-│   │   │   └── Notebook.tsx
-│   │   ├── App.tsx
-│   │   ├── main.tsx
-│   │   ├── api.ts
-│   │   ├── useWebSocket.ts
-│   │   ├── index.css
-│   │   └── vite-env.d.ts
-│   ├── index.html
-│   ├── package.json
-│   ├── tsconfig.json
-│   ├── tsconfig.node.json
-│   └── vite.config.ts
-├── terraform/               # Infrastructure as Code
-│   ├── main.tf             # Root module
-│   ├── variables.tf        # Input variables
-│   ├── outputs.tf          # Output values
-│   ├── backend.tf          # Terraform Cloud config
-│   ├── production.tfvars   # Production environment vars
-│   └── modules/            # Reusable infrastructure modules
-│       ├── networking/     # VPC, subnets, NAT gateways
-│       ├── security/       # Security groups, IAM roles
-│       ├── storage/        # ECR, S3 buckets
-│       ├── compute/        # ECS cluster, ALB
-│       └── cdn/            # CloudFront distribution
-├── requirements.txt
-├── pytest.ini
-└── README.md
+│   │   │   ├── NotebookApp.tsx    # Main notebook UI
+│   │   │   ├── NotebookCell.tsx   # Cell component
+│   │   │   └── ChatPanel.tsx      # LLM chat integration
+│   │   ├── api-client.ts          # HTTP client with auth
+│   │   └── useNotebookWebSocket.ts # WebSocket hook
+│   └── deploy.sh            # Build + upload to S3 + invalidate CloudFront
+├── terraform/
+│   ├── main.tf              # Root module orchestration
+│   ├── variables.tf         # Input variables
+│   ├── production.tfvars    # Production config
+│   └── modules/             # Modular infrastructure
+└── tests/
+    └── integration-test.sh  # End-to-end test script
 ```
 
-### 📂 Directory Organization
+## Technical Details
 
-**Backend Scripts**: All operational scripts are now in `backend/scripts/` for better organization. Each script automatically changes to the `/backend` directory context, so Docker and other commands work correctly regardless of where the script is invoked from.
+### Dependency Extraction
 
-**Terraform Modules**: Infrastructure code uses a modular architecture for better reusability and maintainability. See [terraform/README.md](terraform/README.md) for details.
-
-## Known Limitations
-
-### By Design (V1 Scope)
-
-- **No mutation tracking**: `df.append()` or `list.pop()` not detected (only assignments)
-- **Single worker only**: In-memory state doesn't support multi-worker deployment
-- **No persistence**: Notebooks lost on server restart (in-memory only)
-- **Simple SQL escaping**: Uses basic string replacement (production should use parameterized queries)
-- **Import star ignored**: `from module import *` not tracked
-
-### Technical Constraints
-
-- No cell output history/versioning
-- No undo/redo functionality
-- No drag-and-drop cell reordering
-- No rich visualizations beyond basic HTML tables
-- No package installation within notebooks
-- Dynamic `exec()`/`eval()` dependencies not detected
-
-## Testing
-
-### Automated Tests
-
-```bash
-# Run all tests
-pytest backend/tests/ -v
-
-# Run specific test file
-pytest backend/tests/test_ast_parser.py -v
-pytest backend/tests/test_graph.py -v
+**Python cells:**
+```python
+x = 10           # writes: {x}
+y = x * 2        # reads: {x}, writes: {y}
+z = y + x        # reads: {x, y}, writes: {z}
 ```
+Uses Python AST walker to identify assignments (writes) and name references (reads).
 
-### Manual Testing Checklist
+**SQL cells:**
+```sql
+SELECT * FROM users WHERE id = {user_id}
+-- reads: {user_id}, writes: {}
+```
+Regex-based template variable extraction. Variables substituted from kernel globals before execution.
 
-- [ ] Create notebook from scratch
-- [ ] Add Python and SQL cells
-- [ ] Edit code in cells
-- [ ] Run cells and see execution status
-- [ ] Create dependency chain (A → B → C)
-- [ ] Edit upstream cell, verify downstream auto-reruns
-- [ ] Create circular dependency, verify error shown
-- [ ] Create error in cell, verify dependents blocked
-- [ ] Fix error, verify dependents recover
-- [ ] Delete cell, verify graph updates
-- [ ] Set DB connection, verify SQL works
-- [ ] Use {variable} in SQL, verify substitution
-- [ ] Test Ctrl+Enter keyboard shortcut
-- [ ] Test with 10+ cells (performance)
+### Concurrency
 
-## Production Considerations
+- Per-notebook asyncio lock prevents race conditions during execution
+- Scheduler queues cell runs, drains queue atomically
+- Execution is sequential per notebook (topological order), but multiple notebooks can execute in parallel
 
-For production deployment, consider:
+### Authentication Flow
 
-1. **Database persistence** - Store notebooks in PostgreSQL instead of in-memory
-2. **Authentication** - Add user authentication and authorization
-3. **Parameterized queries** - Use proper SQL parameterization instead of string substitution
-4. **Code sandboxing** - Run code execution in isolated containers
-5. **Multi-worker coordination** - Use Redis or message queue for shared state
-6. **Cell output versioning** - Track execution history
-7. **Rate limiting** - Prevent WebSocket abuse
-8. **Input validation** - Sanitize all user inputs
-9. **Error recovery** - Handle WebSocket disconnections gracefully
-10. **Monitoring** - Add logging and metrics
+1. Frontend obtains JWT from Clerk (`useAuth().getToken()`)
+2. HTTP: Token injected via request interceptor (`Authorization: Bearer`)
+3. WebSocket: Token sent in `authenticate` message after connection
+4. Backend verifies JWT signature using Clerk's JWKS endpoint
+5. User ID extracted from `sub` claim, used for authorization
 
-## Technology Stack
+## Limitations
 
-**Backend:**
-- FastAPI - Web framework
-- Uvicorn - ASGI server
-- asyncpg - PostgreSQL async driver
-- Pydantic - Data validation
-- pytest - Testing
-
-**Frontend:**
-- React - UI library
-- TypeScript - Type safety
-- Vite - Build tool
-- Monaco Editor - Code editor
-- Native WebSocket API - Real-time communication
+- **No mutation tracking** - `df.append()`, `list.pop()` not detected
+- **Single task only** - ECS runs 1 task for in-memory state consistency
+- **Basic SQL escaping** - String substitution (not parameterized queries)
+- **No cell reordering** - Cells maintain insertion order
+- **No output history** - Only current execution state stored
 
 ## License
 
 MIT
-
-## Author
-
-Built by Claude Code for the Querio Take-Home Challenge (December 2025)
-
-## Development Timeline
-
-- **Phase 1**: Backend foundation (models, AST parser, graph) - ✅ Complete
-- **Phase 2**: Reactive execution & WebSocket - ✅ Complete
-- **Phase 3**: SQL support & templates - ✅ Complete
-- **Phase 4**: React frontend - ✅ Complete
-- **Phase 5**: Testing & documentation - ✅ Complete
-
-Total development time: ~4-6 hours of focused implementation

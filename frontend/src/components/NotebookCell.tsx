@@ -11,7 +11,7 @@ import Editor from "@monaco-editor/react";
 
 interface NotebookCellProps {
   cell: CellData;
-  onUpdateCode: (code: string) => void;
+  onUpdateCode: (code: string) => Promise<void>;
   onRun: () => void;
   onDelete: () => void;
   isFocused: boolean;
@@ -37,44 +37,50 @@ export function NotebookCell({
 }: NotebookCellProps) {
   const [localCode, setLocalCode] = useState(cell.code);
   const editorRef = useRef<any>(null);
-  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const hasUnsavedChangesRef = useRef(false);
 
   useEffect(() => {
     setLocalCode(cell.code);
+    hasUnsavedChangesRef.current = false;
   }, [cell.code]);
 
   const handleEditorChange = (value: string | undefined) => {
     if (value !== undefined) {
       setLocalCode(value);
-
-      // Debounce server updates to prevent spam
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-      }
-
-      if (value !== cell.code) {
-        debounceTimerRef.current = setTimeout(() => {
-          onUpdateCode(value);
-        }, 500); // 500ms debounce
-      }
+      // Track that we have unsaved changes
+      hasUnsavedChangesRef.current = value !== cell.code;
     }
   };
 
-  // Cleanup debounce timer on unmount
-  useEffect(() => {
-    return () => {
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-      }
-    };
-  }, []);
+  const handleEditorBlur = async () => {
+    // Save when user clicks away from the cell, but only if there are changes
+    if (hasUnsavedChangesRef.current && localCode !== cell.code) {
+      await onUpdateCode(localCode);
+      hasUnsavedChangesRef.current = false;
+    }
+  };
+
+  const handleRun = async () => {
+    // Save any unsaved changes before running
+    if (hasUnsavedChangesRef.current && localCode !== cell.code) {
+      await onUpdateCode(localCode);
+      hasUnsavedChangesRef.current = false;
+    }
+    // Then run the cell
+    onRun();
+  };
 
   const handleEditorMount = (editor: any, monaco: any) => {
     editorRef.current = editor;
 
+    // Save on blur (when user clicks away from editor)
+    editor.onDidBlurEditorText(() => {
+      handleEditorBlur();
+    });
+
     // Shift+Enter to run cell (Jupyter standard)
     editor.addCommand(monaco.KeyMod.Shift | monaco.KeyCode.Enter, () => {
-      onRun();
+      handleRun();
     });
     
     // Ctrl/Cmd+Shift+Up - Focus previous cell
@@ -134,7 +140,7 @@ export function NotebookCell({
             size="sm"
             onClick={(e) => {
               e.stopPropagation();
-              onRun();
+              handleRun();
             }}
             disabled={cell.status === "running"}
             title="Run cell (Shift+Enter)"
