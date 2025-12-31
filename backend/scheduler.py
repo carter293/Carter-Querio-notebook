@@ -165,10 +165,10 @@ class ExecutionScheduler:
                 "metadata": output.metadata
             })
         
-        # Save notebook to persist stdout, outputs, and error to disk
+        # Save notebook to persist stdout, outputs, and error to storage
         from storage import save_notebook
         async with notebook._lock:
-            save_notebook(notebook)
+            await save_notebook(notebook)
 
     def _get_cell(self, notebook, cell_id: str) -> Optional:
         return next((c for c in notebook.cells if c.id == cell_id), None)

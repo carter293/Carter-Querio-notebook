@@ -3,12 +3,12 @@
   "user_id": "user_37U0GVSi47Y4pucE7h9iZVesr4b",
   "name": "assistent tests",
   "db_conn_string": null,
-  "revision": 7,
+  "revision": 16,
   "cells": [
     {
-      "id": "5eadd2a0-e509-4cd7-a6c0-965e03e4e7e8",
+      "id": "0fe8b98b-b245-4332-910f-cb98f80f09bf",
       "type": "python",
-      "code": "import pandas as pd\nimport plotly.express as px\nimport numpy as np\n\nprint(\"Libraries imported successfully!\") ",
+      "code": "import pandas as pd\nimport plotly.express as px\nimport plotly.graph_objects as go\n\nprint(\"Libraries imported successfully!\")",
       "stdout": "Libraries imported successfully!\n",
       "outputs": [],
       "error": null,
@@ -16,31 +16,31 @@
         "print"
       ],
       "writes": [
-        "np",
         "px",
+        "go",
         "pd"
       ]
     },
     {
-      "id": "25ec7605-1ab3-4888-9c51-1ca336ad1888",
+      "id": "1d36a014-ca18-4c3b-9f8d-950f9853b599",
       "type": "python",
-      "code": "# Create a sample DataFrame\ndata = {\n    'Month': ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],\n    'Sales': [1200, 1500, 1800, 1300, 2000, 2200],\n    'Expenses': [800, 900, 1000, 850, 1100, 1200]\n}\n\ndf = pd.DataFrame(data)\nprint(\"DataFrame created:\")\nprint(df)",
-      "stdout": "DataFrame created:\n  Month  Sales  Expenses\n0   Jan   1200       800\n1   Feb   1500       900\n2   Mar   1800      1000\n3   Apr   1300       850\n4   May   2000      1100\n5   Jun   2200      1200\n",
+      "code": "# Create a sample DataFrame\ndata = {\n    'Month': ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],\n    'Sales': [120, 135, 150, 140, 180, 200],\n    'Profit': [25, 30, 35, 32, 45, 55]\n}\n\ndf = pd.DataFrame(data)\nprint(\"DataFrame created:\")\nprint(df)",
+      "stdout": "DataFrame created:\n  Month  Sales  Profit\n0   Jan    120      25\n1   Feb    135      30\n2   Mar    150      35\n3   Apr    140      32\n4   May    180      45\n5   Jun    200      55\n",
       "outputs": [],
       "error": null,
       "reads": [
-        "pd",
-        "print"
+        "print",
+        "pd"
       ],
       "writes": [
-        "data",
-        "df"
+        "df",
+        "data"
       ]
     },
     {
-      "id": "0fe8b98b-b245-4332-910f-cb98f80f09bf",
+      "id": "5cc361eb-9f5c-41e8-b431-a24d4d9abda2",
       "type": "python",
-      "code": "# Create an interactive line chart\nfig = px.line(df, x='Month', y=['Sales', 'Expenses'], \n              title='Monthly Sales vs Expenses',\n              labels={'value': 'Amount ($)', 'variable': 'Category'},\n              markers=True)\n\nfig.update_layout(\n    xaxis_title='Month',\n    yaxis_title='Amount ($)',\n    legend_title='Category'\n)\n\nfig",
+      "code": "# Create a graph using plotly\nfig = px.line(df, x='Month', y=['Sales', 'Profit'], \n              title='Monthly Sales and Profit Trends',\n              labels={'value': 'Amount ($)', 'variable': 'Metric'})\n\nfig.update_layout(\n    xaxis_title='Month',\n    yaxis_title='Amount ($)',\n    hovermode='x unified'\n)\n\nfig",
       "stdout": "",
       "outputs": [
         {
@@ -48,7 +48,7 @@
           "data": {
             "data": [
               {
-                "hovertemplate": "Category=Sales<br>Month=%{x}<br>Amount ($)=%{y}<extra></extra>",
+                "hovertemplate": "Metric=Sales<br>Month=%{x}<br>Amount ($)=%{y}<extra></extra>",
                 "legendgroup": "Sales",
                 "line": {
                   "color": "#636efa",
@@ -57,7 +57,7 @@
                 "marker": {
                   "symbol": "circle"
                 },
-                "mode": "lines+markers",
+                "mode": "lines",
                 "name": "Sales",
                 "orientation": "v",
                 "showlegend": true,
@@ -72,14 +72,14 @@
                 "xaxis": "x",
                 "y": {
                   "dtype": "i2",
-                  "bdata": "sATcBQgHFAXQB5gI"
+                  "bdata": "eACHAJYAjAC0AMgA"
                 },
                 "yaxis": "y",
                 "type": "scatter"
               },
               {
-                "hovertemplate": "Category=Expenses<br>Month=%{x}<br>Amount ($)=%{y}<extra></extra>",
-                "legendgroup": "Expenses",
+                "hovertemplate": "Metric=Profit<br>Month=%{x}<br>Amount ($)=%{y}<extra></extra>",
+                "legendgroup": "Profit",
                 "line": {
                   "color": "#EF553B",
                   "dash": "solid"
@@ -87,8 +87,8 @@
                 "marker": {
                   "symbol": "circle"
                 },
-                "mode": "lines+markers",
-                "name": "Expenses",
+                "mode": "lines",
+                "name": "Profit",
                 "orientation": "v",
                 "showlegend": true,
                 "x": [
@@ -101,8 +101,8 @@
                 ],
                 "xaxis": "x",
                 "y": {
-                  "dtype": "i2",
-                  "bdata": "IAOEA+gDUgNMBLAE"
+                  "dtype": "i1",
+                  "bdata": "GR4jIC03"
                 },
                 "yaxis": "y",
                 "type": "scatter"
@@ -907,13 +907,14 @@
               },
               "legend": {
                 "title": {
-                  "text": "Category"
+                  "text": "Metric"
                 },
                 "tracegroupgap": 0
               },
               "title": {
-                "text": "Monthly Sales vs Expenses"
-              }
+                "text": "Monthly Sales and Profit Trends"
+              },
+              "hovermode": "x unified"
             }
           },
           "metadata": {}

@@ -28,6 +28,14 @@ module "storage" {
   cloudfront_distribution_arn   = module.cdn.cloudfront_distribution_arn
 }
 
+# Database Module - DynamoDB for notebooks
+module "database" {
+  source = "./modules/database"
+
+  project_name = var.project_name
+  environment  = var.environment
+}
+
 # CDN Module - CloudFront distribution for frontend
 module "cdn" {
   source = "./modules/cdn"
@@ -55,11 +63,13 @@ module "compute" {
   ecs_task_role_arn            = module.security.ecs_task_role_arn
   cloudwatch_log_group_name    = module.security.cloudwatch_log_group_name
   ecr_repository_url           = module.storage.ecr_repository_url
+  dynamodb_table_name          = module.database.dynamodb_table_name
   backend_cpu                  = var.backend_cpu
   backend_memory               = var.backend_memory
   backend_desired_count        = var.backend_desired_count
   alb_certificate_arn          = var.alb_certificate_arn
   clerk_frontend_api           = var.clerk_frontend_api
+  anthropic_api_key            = var.anthropic_api_key
 
   # CORS origins configuration
   allowed_origins = var.frontend_subdomain != "" && var.domain_name != "" ? "https://${module.cdn.cloudfront_domain_name},https://${var.frontend_subdomain}.${var.domain_name}" : "https://${module.cdn.cloudfront_domain_name}"

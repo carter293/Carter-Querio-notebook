@@ -131,6 +131,18 @@ resource "aws_ecs_task_definition" "backend" {
         {
           name  = "CLERK_FRONTEND_API"
           value = var.clerk_frontend_api
+        },
+        {
+          name  = "DYNAMODB_TABLE_NAME"
+          value = var.dynamodb_table_name
+        },
+        {
+          name  = "AWS_REGION"
+          value = var.aws_region
+        },
+        {
+          name  = "ANTHROPIC_API_KEY"
+          value = var.anthropic_api_key
         }
       ]
 

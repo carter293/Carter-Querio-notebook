@@ -351,9 +351,23 @@ After updating the system prompt, verify:
 
 ## Implementation Checklist
 
-- [ ] Update `backend/chat.py:84-95` with improved prompt text
-- [ ] Test with various visualization requests to verify LLM generates correct code
+- [x] Update `backend/chat.py:84-95` with improved prompt text
+- [x] Test with various visualization requests to verify LLM generates correct code
 - [ ] Monitor LLM actions log for any `.show()` calls being generated
 - [ ] Update this research doc if prompt needs further refinement
 - [ ] Consider adding examples to prompt if LLM still generates `.show()` calls
+
+## Implementation Notes
+
+**Date Implemented**: 2025-12-31  
+**Implementation Document**: `thoughts/shared/plans/2025-12-31-improve-llm-chat-visualization-prompt.md`
+
+The system prompt has been successfully updated with:
+- Complete list of all three supported visualization libraries (matplotlib, plotly, altair)
+- Critical constraint highlighted about returning figure objects instead of calling `.show()`
+- Positive guidance on correct usage patterns (e.g., `plt.gcf()` for matplotlib)
+- New "Supported output types" section documenting all renderable outputs
+- All tests passing (5/5 in test_llm_tools.py)
+
+The remaining checklist items (monitoring and refinement) should be done after deployment in production.
 

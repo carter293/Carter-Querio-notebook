@@ -526,7 +526,9 @@ export function NotebookApp() {
         <div className="flex-1 overflow-y-auto px-6 py-4">
           <div className="mx-auto max-w-5xl space-y-4">
             {cells.map((cell) => (
-              <div key={cell.id} ref={(el) => el && cellRefs.current.set(cell.id, el)}>
+              <div key={cell.id} ref={el => {
+                el && cellRefs.current.set(cell.id, el);
+              }}>
                 <NotebookCell
                   cell={cell}
                   onUpdateCode={(code) => updateCellCode(cell.id, code)}
@@ -572,10 +574,8 @@ export function NotebookApp() {
           </div>
         </div>
       </div>
-
       {/* Right: Chat Panel */}
       <ChatPanel isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} notebookId={notebookId} />
-
       {/* Keyboard Shortcuts Dialog */}
       <KeyboardShortcutsDialog open={showKeyboardShortcuts} onOpenChange={setShowKeyboardShortcuts} />
     </div>

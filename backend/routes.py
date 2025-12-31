@@ -162,7 +162,7 @@ async def create_notebook(
     )
 
     NOTEBOOKS[notebook_id] = notebook
-    save_notebook(notebook)
+    await save_notebook(notebook)
     return CreateNotebookResponse(notebook_id=notebook_id)
 
 @router.get("/notebooks", response_model=ListNotebooksResponse)
@@ -190,7 +190,7 @@ async def list_notebooks_endpoint(
             )]
         )
         NOTEBOOKS[blank_id] = blank_notebook
-        save_notebook(blank_notebook)
+        await save_notebook(blank_notebook)
     
     # Check if user has a demo notebook
     demo_id = f"demo-{user_id}"
@@ -199,7 +199,7 @@ async def list_notebooks_endpoint(
         demo_notebook = create_demo_notebook(user_id)
         demo_notebook.id = demo_id  # Use user-specific demo ID
         NOTEBOOKS[demo_id] = demo_notebook
-        save_notebook(demo_notebook)
+        await save_notebook(demo_notebook)
     
     # Return all user notebooks
     user_notebooks = [
@@ -290,7 +290,7 @@ async def update_db_connection(
         )
     
     notebook.db_conn_string = request_body.connection_string
-    save_notebook(notebook)
+    await save_notebook(notebook)
     return {"status": "ok"}
 
 @router.put("/notebooks/{notebook_id}/name")
@@ -317,7 +317,7 @@ async def rename_notebook(
         )
     
     notebook.name = request_body.name.strip() if request_body.name.strip() else None
-    save_notebook(notebook)
+    await save_notebook(notebook)
     return {"status": "ok", "name": notebook.name}
 
 @router.delete("/notebooks/{notebook_id}")
@@ -345,8 +345,8 @@ async def delete_notebook_endpoint(
     # Remove from memory
     del NOTEBOOKS[notebook_id]
     
-    # Remove from disk
-    delete_notebook(notebook_id)
+    # Remove from storage
+    await delete_notebook(notebook_id, user_id)
     
     return {"status": "ok"}
 

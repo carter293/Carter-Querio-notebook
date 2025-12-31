@@ -139,6 +139,38 @@ resource "aws_iam_role" "ecs_task_role" {
   }
 }
 
+# DynamoDB permissions for ECS tasks
+data "aws_region" "current" {}
+data "aws_caller_identity" "current" {}
+
+resource "aws_iam_role_policy" "ecs_task_dynamodb" {
+  name = "${var.project_name}-ecs-task-dynamodb-policy"
+  role = aws_iam_role.ecs_task_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:Query",
+          "dynamodb:Scan",
+          "dynamodb:BatchGetItem",
+          "dynamodb:BatchWriteItem"
+        ]
+        Resource = [
+          "arn:aws:dynamodb:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:table/${var.project_name}-notebooks-*",
+          "arn:aws:dynamodb:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:table/${var.project_name}-notebooks-*/index/*"
+        ]
+      }
+    ]
+  })
+}
+
 # CloudWatch Logs
 resource "aws_cloudwatch_log_group" "backend" {
   name              = "/ecs/${var.project_name}-backend"

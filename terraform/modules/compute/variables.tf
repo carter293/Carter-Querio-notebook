@@ -89,3 +89,14 @@ variable "clerk_frontend_api" {
   type        = string
 }
 
+variable "dynamodb_table_name" {
+  description = "DynamoDB table name for notebook storage"
+  type        = string
+}
+
+variable "anthropic_api_key" {
+  description = "Anthropic API Key for Claude LLM integration"
+  type        = string
+  sensitive   = true
+}
+

@@ -2,15 +2,45 @@ import os
 from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, HTTPException, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 import jwt
 from jwt import PyJWKClient
 from routes import router, NOTEBOOKS
-from storage import list_notebooks, load_notebook, save_notebook
+from storage import list_notebooks, load_notebook, save_notebook, DYNAMODB_ENABLED
 from chat import router as chat_router
 
 load_dotenv(override=True)
 
-app = FastAPI(title="Reactive Notebook")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifecycle manager."""
+    print("Starting Reactive Notebook...")
+    
+    if DYNAMODB_ENABLED:
+        print(f"✓ DynamoDB enabled: {os.getenv('DYNAMODB_TABLE_NAME')}")
+        print("  - Sub-10ms latency for all operations")
+        print("  - Serverless auto-scaling enabled")
+        print("  - Notebooks will be lazy-loaded on first access")
+    else:
+        print("Using file-based storage (local dev)")
+        # Load existing notebooks from files
+        notebook_ids = await list_notebooks()
+        if notebook_ids:
+            print(f"Loading {len(notebook_ids)} notebook(s)...")
+            for notebook_id in notebook_ids:
+                try:
+                    notebook = await load_notebook(notebook_id)
+                    NOTEBOOKS[notebook_id] = notebook
+                    print(f"  ✓ Loaded: {notebook_id}")
+                except Exception as e:
+                    print(f"  ✗ Failed: {notebook_id}: {e}")
+        else:
+            print("No notebooks found. Users will create their own.")
+    
+    yield
+    print("👋 Shutting down...")
+
+app = FastAPI(title="Reactive Notebook", lifespan=lifespan)
 
 # Initialize Clerk JWT verification
 CLERK_FRONTEND_API = os.getenv("CLERK_FRONTEND_API")
@@ -124,23 +154,6 @@ async def get_current_user(request: Request):
 # Make get_current_user and jwks_client available to routes
 app.state.get_current_user = get_current_user
 app.state.jwks_client = jwks_client
-
-@app.on_event("startup")
-async def startup_event():
-    notebook_ids = list_notebooks()
-
-    if notebook_ids:
-        print(f"Loading {len(notebook_ids)} notebook(s)...")
-        for notebook_id in notebook_ids:
-            try:
-                notebook = load_notebook(notebook_id)
-                NOTEBOOKS[notebook_id] = notebook
-                print(f"  ✓ Loaded: {notebook_id}")
-            except Exception as e:
-                print(f"  ✗ Failed: {notebook_id}: {e}")
-    else:
-        # Note: Demo notebook creation removed - requires user_id
-        print("No notebooks found. Users will create their own.")
 
 app.include_router(router, prefix="/api")
 app.include_router(chat_router, prefix="/api", tags=["chat"])

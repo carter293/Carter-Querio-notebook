@@ -32,7 +32,7 @@ Key considerations:
 1. Current architecture is in-memory (notebooks stored in memory)
 2. WebSocket support required for real-time cell execution updates
 3. Future separation of orchestrator and kernel planned (not implemented now)
-4. London region pricing is ~12% higher than us-east-1 but provides optimal UK latency
+4. London region pricing is ~12% higher than eu-north-1 but provides optimal UK latency
 
 ## Current Architecture
 
@@ -72,23 +72,23 @@ Key considerations:
 
 ### Why London?
 - **Location**: Primary AWS region serving the UK
-- **Latency**: ~5-10ms for UK users (vs ~80-100ms for us-east-1)
+- **Latency**: ~5-10ms for UK users (vs ~80-100ms for eu-north-1)
 - **Data Residency**: Data stays in UK/EU (GDPR compliance)
 - **Availability Zones**: 3 AZs for high availability
 - **Services**: Full ECS Fargate, S3, CloudFront support
 
 ### Pricing Comparison
-- **eu-north-1 (London)**: ~12% more expensive than us-east-1
-- **eu-west-1 (Ireland)**: ~8% more expensive than us-east-1, alternative if cost is priority
+- **eu-north-1 (London)**: ~12% more expensive than eu-north-1
+- **eu-west-1 (Ireland)**: ~8% more expensive than eu-north-1, alternative if cost is priority
 - **Trade-off**: Higher cost justified by significantly better latency for UK users
 
 ### Alternative Regions for UK
-| Region | Location | Latency from UK | Price vs us-east-1 | Recommendation |
+| Region | Location | Latency from UK | Price vs eu-north-1 | Recommendation |
 |--------|----------|----------------|-------------------|----------------|
 | **eu-north-1** | London | ~5-10ms | +12% | ✅ **Best choice** |
 | eu-west-1 | Ireland | ~20-30ms | +8% | Good alternative |
 | eu-central-1 | Frankfurt | ~40-50ms | +10% | Not recommended |
-| us-east-1 | Virginia | ~80-100ms | Base | Poor latency |
+| eu-north-1 | Virginia | ~80-100ms | Base | Poor latency |
 
 ## Deployment Architecture
 
@@ -1264,7 +1264,7 @@ variable "backend_desired_count" {
 - **CloudWatch Logs**: ~$1-5/month (for 7-day retention)
 - **ECR Storage**: ~$0.10/month (for Docker images)
 - **Total**: **$115-165/month** (1 task, 2 AZs)
-- **Note**: London region is ~12% more expensive than us-east-1
+- **Note**: London region is ~12% more expensive than eu-north-1
 
 **Scaling**: Each additional task adds ~$18/month
 
@@ -1275,7 +1275,7 @@ variable "backend_desired_count" {
 ### Total Estimated Cost (London Region)
 - **Single Task Deployment**: $135-240/month (current architecture, eu-north-1)
 - **Future Multi-Task (with persistence)**: $220-440/month (with traffic, 2+ tasks)
-- **Note**: London pricing is ~12-15% higher than us-east-1, but provides lower latency for UK users
+- **Note**: London pricing is ~12-15% higher than eu-north-1, but provides lower latency for UK users
 
 **Cost Optimization Tips**:
 - Use single NAT Gateway instead of 2 (saves $37/month in eu-north-1, reduces HA)

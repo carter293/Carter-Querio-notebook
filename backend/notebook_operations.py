@@ -59,8 +59,8 @@ async def locked_update_cell(
         # Increment revision
         notebook.revision += 1
         
-        # Save to disk
-        save_notebook(notebook)
+        # Save to storage
+        await save_notebook(notebook)
         
         return cell
 
@@ -110,7 +110,7 @@ async def locked_create_cell(
         notebook.revision += 1
         
         # Save
-        save_notebook(notebook)
+        await save_notebook(notebook)
         
         return new_cell
 
@@ -139,7 +139,7 @@ async def locked_delete_cell(
         notebook.revision += 1
         
         # Save
-        save_notebook(notebook)
+        await save_notebook(notebook)
 
 
 async def locked_get_notebook_snapshot(notebook: Notebook) -> dict:

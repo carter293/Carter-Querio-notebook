@@ -90,3 +90,12 @@ variable "clerk_publishable_key" {
   type        = string
 }
 
+# Anthropic API Key for LLM chat functionality
+# Should be set via environment variable:
+# export TF_VAR_anthropic_api_key="sk-ant-..."
+variable "anthropic_api_key" {
+  description = "Anthropic API Key for Claude LLM integration. Set via TF_VAR_anthropic_api_key environment variable."
+  type        = string
+  sensitive   = true
+}
+
