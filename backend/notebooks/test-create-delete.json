@@ -1,0 +1,99 @@
+{
+  "id": "test-create-delete",
+  "user_id": "test-user",
+  "name": "Test Notebook",
+  "db_conn_string": null,
+  "revision": 10,
+  "cells": [
+    {
+      "id": "171f1861-7653-4cf6-86cd-dbda3acb2d5d",
+      "type": "python",
+      "code": "x0 = 0",
+      "reads": [],
+      "writes": [
+        "x0"
+      ]
+    },
+    {
+      "id": "95da18a8-0766-4b11-a18d-5d16969a0896",
+      "type": "python",
+      "code": "x1 = 1",
+      "reads": [],
+      "writes": [
+        "x1"
+      ]
+    },
+    {
+      "id": "beebfedb-2187-4b22-924e-197dc9dfec69",
+      "type": "python",
+      "code": "x2 = 2",
+      "reads": [],
+      "writes": [
+        "x2"
+      ]
+    },
+    {
+      "id": "437878e0-1239-4767-8eb3-48da6eb7a94f",
+      "type": "python",
+      "code": "x3 = 3",
+      "reads": [],
+      "writes": [
+        "x3"
+      ]
+    },
+    {
+      "id": "6c52266d-aacc-4352-88d2-f4bce40a67dd",
+      "type": "python",
+      "code": "x4 = 4",
+      "reads": [],
+      "writes": [
+        "x4"
+      ]
+    },
+    {
+      "id": "146439e9-2ec1-4462-9270-e80d8b7a3d81",
+      "type": "python",
+      "code": "x5 = 5",
+      "reads": [],
+      "writes": [
+        "x5"
+      ]
+    },
+    {
+      "id": "23e13a77-058f-495e-bbd6-4e8fa20e63df",
+      "type": "python",
+      "code": "x6 = 6",
+      "reads": [],
+      "writes": [
+        "x6"
+      ]
+    },
+    {
+      "id": "55b8c62d-3df3-43ea-bf53-2f3c1ac34dca",
+      "type": "python",
+      "code": "x7 = 7",
+      "reads": [],
+      "writes": [
+        "x7"
+      ]
+    },
+    {
+      "id": "ffb274b9-5106-442b-914f-1b396e76f637",
+      "type": "python",
+      "code": "x8 = 8",
+      "reads": [],
+      "writes": [
+        "x8"
+      ]
+    },
+    {
+      "id": "5f030298-7c0e-44c8-872c-690a24243ec4",
+      "type": "python",
+      "code": "x9 = 9",
+      "reads": [],
+      "writes": [
+        "x9"
+      ]
+    }
+  ]
+}

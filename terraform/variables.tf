@@ -78,12 +78,11 @@ variable "backend_subdomain" {
 
 # Clerk authentication variables
 # These should be set via environment variables:
-# export TF_VAR_clerk_secret_key="sk_live_..."
+# export TF_VAR_clerk_frontend_api="your-app.clerk.accounts.dev"
 # export TF_VAR_clerk_publishable_key="pk_live_..."
-variable "clerk_secret_key" {
-  description = "Clerk Secret Key for backend authentication (sk_live_...). Set via TF_VAR_clerk_secret_key environment variable."
+variable "clerk_frontend_api" {
+  description = "Clerk Frontend API domain for JWT verification (e.g., 'your-app.clerk.accounts.dev'). Set via TF_VAR_clerk_frontend_api environment variable."
   type        = string
-  sensitive   = true
 }
 
 variable "clerk_publishable_key" {

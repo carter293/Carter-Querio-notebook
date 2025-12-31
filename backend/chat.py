@@ -13,7 +13,6 @@ from routes import get_current_user_dependency, NOTEBOOKS
 from scheduler import scheduler
 from websocket import broadcaster
 from llm_tools import TOOL_SCHEMAS, execute_tool, tool_get_notebook_state
-from audit import log_llm_action
 
 router = APIRouter()
 
@@ -153,14 +152,6 @@ Cell statuses:
                             "tool_name": block.name,
                             "tool_input": block.input
                         })
-                        
-                        # Log tool execution for audit
-                        log_llm_action(
-                            notebook_id=notebook_id,
-                            user_id=user_id,
-                            action=f"tool_{block.name}",
-                            details=block.input
-                        )
                         
                         # Execute tool (with locks!)
                         result = await execute_tool(

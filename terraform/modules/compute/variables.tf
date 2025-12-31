@@ -84,9 +84,8 @@ variable "alb_certificate_arn" {
   default     = ""
 }
 
-variable "clerk_secret_key" {
-  description = "Clerk Secret Key for backend authentication"
+variable "clerk_frontend_api" {
+  description = "Clerk Frontend API domain for JWT verification"
   type        = string
-  sensitive   = true
 }
 

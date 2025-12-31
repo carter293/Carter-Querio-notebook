@@ -3,7 +3,7 @@
   "user_id": "user_37U0GVSi47Y4pucE7h9iZVesr4b",
   "name": "demo-user_37U0GVSi47Y4pucE7h9iZVesr4b",
   "db_conn_string": null,
-  "revision": 23,
+  "revision": 27,
   "cells": [
     {
       "id": "795f0eb7-3604-4ef1-b10a-4d9ec0c74dda",
@@ -13,8 +13,8 @@
         "time"
       ],
       "writes": [
-        "x",
-        "time"
+        "time",
+        "x"
       ]
     },
     {
@@ -34,8 +34,8 @@
       "code": "import matplotlib.pyplot as plt\n\n# Matplotlib chart - rendered as PNG\nplt.figure(figsize=(8, 5))\nplt.plot([1, 2, 3], [x, y, 15], marker='o', linewidth=2)\nplt.title(f\"Matplotlib: Dependency Demo (x={x}, y={y})\")\nplt.xlabel(\"Step\")\nplt.ylabel(\"Value\")\nplt.grid(True, alpha=0.3)\nplt.gcf()",
       "reads": [
         "x",
-        "plt",
-        "y"
+        "y",
+        "plt"
       ],
       "writes": [
         "plt"
@@ -47,8 +47,8 @@
       "code": "import pandas as pd\n\n# Create DataFrame\ndf = pd.DataFrame({\n    \"category\": [\"A\", \"B\", \"C\", \"D\"],\n    \"value\": [x, y, x+y, x*2],\n    \"label\": [\"X\", \"Y\", \"Sum\", \"Double\"]\n})\ndf",
       "reads": [
         "x",
-        "pd",
-        "y"
+        "y",
+        "pd"
       ],
       "writes": [
         "df",
@@ -60,8 +60,8 @@
       "type": "python",
       "code": "import plotly.express as px\n\n# Plotly interactive chart - rendered as HTML\nfig = px.bar(\n    df,\n    x=\"category\",\n    y=\"value\",\n    title=f\"Plotly: Interactive Bar Chart (x={x})\",\n    labels={\"value\": \"Amount\", \"category\": \"Category\"},\n    text=\"label\",\n    color=\"value\",\n    color_continuous_scale=\"viridis\"\n)\nfig.update_traces(textposition='outside')\nfig.update_layout(height=400)\nfig",
       "reads": [
-        "px",
         "df",
+        "px",
         "x"
       ],
       "writes": [

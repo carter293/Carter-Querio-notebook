@@ -3,7 +3,7 @@ import os
 import tempfile
 from pathlib import Path
 from typing import Dict, List
-from models import Notebook, Cell, CellType, CellStatus, Graph, KernelState
+from models import Notebook, Cell, CellType, CellStatus, Graph, KernelState, Output
 
 NOTEBOOKS_DIR = Path("notebooks")
 
@@ -24,6 +24,16 @@ def save_notebook(notebook: Notebook) -> None:
                 "id": cell.id,
                 "type": cell.type.value,
                 "code": cell.code,
+                "stdout": cell.stdout,
+                "outputs": [
+                    {
+                        "mime_type": output.mime_type,
+                        "data": output.data,
+                        "metadata": output.metadata
+                    }
+                    for output in cell.outputs
+                ],
+                "error": cell.error,
                 "reads": list(cell.reads),
                 "writes": list(cell.writes)
             }
@@ -59,6 +69,16 @@ def load_notebook(notebook_id: str) -> Notebook:
             type=CellType(cell_data["type"]),
             code=cell_data["code"],
             status=CellStatus.IDLE,
+            stdout=cell_data.get("stdout", ""),
+            outputs=[
+                Output(
+                    mime_type=output_data["mime_type"],
+                    data=output_data["data"],
+                    metadata=output_data.get("metadata", {})
+                )
+                for output_data in cell_data.get("outputs", [])
+            ],
+            error=cell_data.get("error"),
             reads=set(cell_data.get("reads", [])),
             writes=set(cell_data.get("writes", []))
         )

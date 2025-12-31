@@ -7,6 +7,8 @@ import type { CellData } from "./NotebookApp";
 import { OutputRenderer } from "./OutputRenderer";
 import Editor from "@monaco-editor/react";
 
+
+
 interface NotebookCellProps {
   cell: CellData;
   onUpdateCode: (code: string) => void;
@@ -14,9 +16,25 @@ interface NotebookCellProps {
   onDelete: () => void;
   isFocused: boolean;
   onFocus: () => void;
+  // Application-level keyboard shortcuts
+  onFocusPreviousCell: () => void;
+  onFocusNextCell: () => void;
+  onToggleKeyboardShortcuts: () => void;
+  onToggleChat: () => void;
 }
 
-export function NotebookCell({ cell, onUpdateCode, onRun, onDelete, isFocused, onFocus }: NotebookCellProps) {
+export function NotebookCell({ 
+  cell, 
+  onUpdateCode, 
+  onRun, 
+  onDelete, 
+  isFocused, 
+  onFocus,
+  onFocusPreviousCell,
+  onFocusNextCell,
+  onToggleKeyboardShortcuts,
+  onToggleChat
+}: NotebookCellProps) {
   const [localCode, setLocalCode] = useState(cell.code);
   const editorRef = useRef<any>(null);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -54,8 +72,34 @@ export function NotebookCell({ cell, onUpdateCode, onRun, onDelete, isFocused, o
   const handleEditorMount = (editor: any, monaco: any) => {
     editorRef.current = editor;
 
-    // Add Cmd/Ctrl+Enter to run cell
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => onRun());
+    // Shift+Enter to run cell (Jupyter standard)
+    editor.addCommand(monaco.KeyMod.Shift | monaco.KeyCode.Enter, () => {
+      onRun();
+    });
+    
+    // Ctrl/Cmd+Shift+Up - Focus previous cell
+    editor.addCommand(
+      monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.UpArrow,
+      () => onFocusPreviousCell()
+    );
+    
+    // Ctrl/Cmd+Shift+Down - Focus next cell
+    editor.addCommand(
+      monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.DownArrow,
+      () => onFocusNextCell()
+    );
+    
+    // Cmd/Ctrl+K - Show keyboard shortcuts
+    editor.addCommand(
+      monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK,
+      () => onToggleKeyboardShortcuts()
+    );
+    
+    // Cmd/Ctrl+B - Toggle chat panel
+    editor.addCommand(
+      monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyB,
+      () => onToggleChat()
+    );
   };
 
   const statusConfig = {
@@ -93,7 +137,7 @@ export function NotebookCell({ cell, onUpdateCode, onRun, onDelete, isFocused, o
               onRun();
             }}
             disabled={cell.status === "running"}
-            title="Run cell (⌘+Enter)"
+            title="Run cell (Shift+Enter)"
           >
             <Play className="h-3 w-3" />
           </Button>
@@ -130,6 +174,13 @@ export function NotebookCell({ cell, onUpdateCode, onRun, onDelete, isFocused, o
           }}
         />
       </div>
+
+      {/* Stdout Area */}
+      {cell.stdout && (
+        <div className="bg-muted/50 p-4 font-mono text-sm border-b border-border">
+          <pre className="whitespace-pre-wrap m-0">{cell.stdout}</pre>
+        </div>
+      )}
 
       {/* Output Area */}
       {cell.outputs && cell.outputs.length > 0 && (

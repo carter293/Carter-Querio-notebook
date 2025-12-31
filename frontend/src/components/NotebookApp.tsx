@@ -141,11 +141,20 @@ export function NotebookApp() {
           prev.map((c) => {
             if (c.id !== msg.cellId) return c;
             if (msg.status === 'running') {
-              // Clear outputs when execution starts
-              return { ...c, status: msg.status, outputs: [], error: undefined };
+              // Clear outputs and stdout when execution starts
+              return { ...c, status: msg.status, outputs: [], stdout: "", error: undefined };
             }
             return { ...c, status: msg.status };
           })
+        );
+        break;
+      case "cell_stdout":
+        setCells((prev) =>
+          prev.map((c) =>
+            c.id === msg.cellId
+              ? { ...c, stdout: (c.stdout || "") + msg.data }
+              : c
+          )
         );
         break;
       case "cell_output":
@@ -266,7 +275,7 @@ export function NotebookApp() {
     }
   };
 
-  const handleRenameNotebook = async (id: string, name: string) => {
+  const handleRenameNotebook = async (id: string, name: string, keepSelectOpen = true) => {
     if (!name.trim()) return;
 
     try {
@@ -275,8 +284,10 @@ export function NotebookApp() {
       setNotebooks(notebookList);
       setRenamingNotebookId(null);
       setRenameValue("");
-      // Ensure select stays open after rename
-      setNotebookSelectOpen(true);
+      // Only open select if this was an in-dropdown rename
+      if (keepSelectOpen) {
+        setNotebookSelectOpen(true);
+      }
     } catch (err) {
       console.error("Failed to rename notebook:", err);
     }
@@ -376,13 +387,13 @@ export function NotebookApp() {
                   onChange={(e) => setCurrentNotebookRenameValue(e.target.value)}
                   onBlur={async () => {
                     if (currentNotebookRenameValue.trim() && notebookId) {
-                      await handleRenameNotebook(notebookId, currentNotebookRenameValue);
+                      await handleRenameNotebook(notebookId, currentNotebookRenameValue, false);
                     }
                     setIsRenamingCurrent(false);
                   }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && notebookId) {
-                      handleRenameNotebook(notebookId, currentNotebookRenameValue);
+                      handleRenameNotebook(notebookId, currentNotebookRenameValue, false);
                       setIsRenamingCurrent(false);
                     } else if (e.key === "Escape") {
                       setIsRenamingCurrent(false);

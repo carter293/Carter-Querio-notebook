@@ -1,5 +1,5 @@
 import useWebSocket, { ReadyState } from 'react-use-websocket';
-import { useCallback, useRef, useEffect } from 'react';
+import { useCallback, useRef, useEffect, useState } from 'react';
 import type { CellResponse, OutputResponse, CellStatus } from './client/types.gen';
 import { WS_BASE_URL } from './api-client';
 
@@ -26,34 +26,7 @@ export function isWSMessage(msg: unknown): msg is WSMessage {
   );
 }
 
-// Specific type guards for each message type (preserved from original)
-export function isCellUpdated(msg: WSMessage): msg is Extract<WSMessage, { type: 'cell_updated' }> {
-  return msg.type === 'cell_updated';
-}
-
-export function isCellCreated(msg: WSMessage): msg is Extract<WSMessage, { type: 'cell_created' }> {
-  return msg.type === 'cell_created';
-}
-
-export function isCellDeleted(msg: WSMessage): msg is Extract<WSMessage, { type: 'cell_deleted' }> {
-  return msg.type === 'cell_deleted';
-}
-
-export function isCellStatus(msg: WSMessage): msg is Extract<WSMessage, { type: 'cell_status' }> {
-  return msg.type === 'cell_status';
-}
-
-export function isCellStdout(msg: WSMessage): msg is Extract<WSMessage, { type: 'cell_stdout' }> {
-  return msg.type === 'cell_stdout';
-}
-
-export function isCellError(msg: WSMessage): msg is Extract<WSMessage, { type: 'cell_error' }> {
-  return msg.type === 'cell_error';
-}
-
-export function isCellOutput(msg: WSMessage): msg is Extract<WSMessage, { type: 'cell_output' }> {
-  return msg.type === 'cell_output';
-}
+export type ConnectionStatus = 'connected' | 'connecting' | 'disconnected' | 'reconnecting';
 
 interface UseNotebookWebSocketOptions {
   onMessage: (msg: WSMessage) => void;
@@ -67,6 +40,9 @@ export function useNotebookWebSocket(
   const didUnmount = useRef(false);
   const isAuthenticated = useRef(false);
   const tokenRef = useRef(token);
+  const messageQueue = useRef<object[]>([]);
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected');
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
   
   // Keep token ref updated for use in callbacks
   useEffect(() => {
@@ -86,6 +62,8 @@ export function useNotebookWebSocket(
     onOpen: () => {
       console.log('WebSocket connected, sending authentication...');
       isAuthenticated.current = false;
+      setConnectionStatus('connecting');
+      setReconnectAttempt(0);
       sendJsonMessage({ type: 'authenticate', token: tokenRef.current });
     },
 
@@ -98,6 +76,15 @@ export function useNotebookWebSocket(
         if (data.type === 'authenticated') {
           console.log('WebSocket authenticated successfully');
           isAuthenticated.current = true;
+          setConnectionStatus('connected');
+          
+          // Flush message queue
+          if (messageQueue.current.length > 0) {
+            console.log(`Flushing ${messageQueue.current.length} queued messages...`);
+            const queue = [...messageQueue.current];
+            messageQueue.current = [];
+            queue.forEach(msg => sendJsonMessage(msg));
+          }
           return;
         }
 
@@ -121,6 +108,14 @@ export function useNotebookWebSocket(
     onClose: (event) => {
       console.log('WebSocket disconnected', event.code, event.reason);
       isAuthenticated.current = false;
+      
+      // Update status based on whether we'll reconnect
+      if (event.code === 1008 || event.code === 1000 || didUnmount.current) {
+        setConnectionStatus('disconnected');
+      } else {
+        setConnectionStatus('reconnecting');
+        setReconnectAttempt(prev => prev + 1);
+      }
     },
 
     onError: (event) => {
@@ -162,16 +157,18 @@ export function useNotebookWebSocket(
     if (readyState === ReadyState.OPEN && isAuthenticated.current) {
       sendJsonMessage({ type: 'run_cell', cellId });
     } else {
-      console.warn('WebSocket not ready, cannot run cell');
+      console.warn('WebSocket not ready, queueing cell execution for:', cellId);
+      messageQueue.current.push({ type: 'run_cell', cellId });
     }
   }, [readyState, sendJsonMessage]);
 
   // Generic send for any message (maintains old interface)
   const sendMessage = useCallback((message: object) => {
-    if (readyState === ReadyState.OPEN) {
+    if (readyState === ReadyState.OPEN && isAuthenticated.current) {
       sendJsonMessage(message);
     } else {
-      console.warn('WebSocket not connected, message not sent:', message);
+      console.warn('WebSocket not connected, queueing message:', message);
+      messageQueue.current.push(message);
     }
   }, [readyState, sendJsonMessage]);
 
@@ -180,6 +177,9 @@ export function useNotebookWebSocket(
     runCell,
     connected: readyState === ReadyState.OPEN && isAuthenticated.current,
     readyState,
+    connectionStatus,
+    reconnectAttempt,
+    queuedMessages: messageQueue.current.length,
   };
 }
 

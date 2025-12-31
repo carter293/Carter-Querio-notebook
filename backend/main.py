@@ -1,11 +1,9 @@
 import os
-import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, HTTPException, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
-from clerk_backend_api import Clerk
-from clerk_backend_api.security import authenticate_request
-from clerk_backend_api.security.types import AuthenticateRequestOptions
+import jwt
+from jwt import PyJWKClient
 from routes import router, NOTEBOOKS
 from storage import list_notebooks, load_notebook, save_notebook
 from chat import router as chat_router
@@ -14,12 +12,21 @@ load_dotenv(override=True)
 
 app = FastAPI(title="Reactive Notebook")
 
-# Initialize Clerk SDK
-CLERK_SECRET_KEY = os.getenv("CLERK_SECRET_KEY")
-if not CLERK_SECRET_KEY:
-    raise ValueError("CLERK_SECRET_KEY environment variable is required")
+# Initialize Clerk JWT verification
+CLERK_FRONTEND_API = os.getenv("CLERK_FRONTEND_API")
+if not CLERK_FRONTEND_API:
+    raise ValueError("CLERK_FRONTEND_API environment variable is required (e.g., 'your-app.clerk.accounts.dev')")
 
-clerk = Clerk(bearer_auth=CLERK_SECRET_KEY)
+JWKS_URL = f"https://{CLERK_FRONTEND_API}/.well-known/jwks.json"
+
+# Initialize PyJWKClient for JWT verification
+jwks_client = PyJWKClient(
+    uri=JWKS_URL,
+    cache_keys=True,
+    max_cached_keys=16,
+    cache_jwk_set=True,
+    lifespan=300,
+)
 
 # CORS configuration with environment variable support
 allowed_origins_str = os.getenv(
@@ -40,9 +47,9 @@ app.add_middleware(
 async def get_current_user(request: Request):
     """
     Verify Clerk JWT token and return user ID.
+    Uses PyJWT with Clerk's JWKS endpoint for verification.
     Raises HTTPException(401) if token is invalid or missing.
     """
-    # Convert FastAPI Request to httpx Request for Clerk SDK
     auth_header = request.headers.get("authorization")
     if not auth_header:
         raise HTTPException(
@@ -63,41 +70,25 @@ async def get_current_user(request: Request):
         
         token = parts[1]
         
-        # Create httpx Request from FastAPI Request
-        url = str(request.url)
-        method = request.method
-        headers = dict(request.headers)
+        # Get signing key from JWKS
+        signing_key = jwks_client.get_signing_key_from_jwt(token)
         
-        httpx_request = httpx.Request(
-            method=method,
-            url=url,
-            headers=headers,
+        # Decode and verify JWT token
+        decoded_token = jwt.decode(
+            token,
+            key=signing_key.key,
+            algorithms=["RS256"],
+            options={
+                "verify_exp": True,
+                "verify_aud": False,
+                "verify_iss": False,
+                "verify_iat": True,
+            },
+            leeway=0,
         )
         
-        # Verify token with Clerk using authenticate_request
-        request_state = clerk.authenticate_request(
-            httpx_request,
-            AuthenticateRequestOptions()
-        )
-        
-        if not request_state.is_signed_in:
-            reason = request_state.reason or "Token verification failed"
-            raise HTTPException(
-                status_code=401,
-                detail=f"Authentication failed: {reason}. Please sign in again.",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        
-        # Extract user_id from token payload
-        payload = request_state.payload
-        if not payload:
-            raise HTTPException(
-                status_code=401,
-                detail="Invalid token: missing payload",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        
-        user_id = payload.get("sub")
+        # Extract user_id from 'sub' claim
+        user_id = decoded_token.get("sub")
         if not user_id:
             raise HTTPException(
                 status_code=401,
@@ -108,16 +99,20 @@ async def get_current_user(request: Request):
         return user_id
     
     except HTTPException:
-        # Re-raise HTTPExceptions as-is
         raise
-    except ValueError as e:
+    except jwt.ExpiredSignatureError:
         raise HTTPException(
             status_code=401,
-            detail=f"Invalid authorization header format: {str(e)}",
+            detail="Token has expired. Please sign in again.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except jwt.InvalidTokenError as e:
+        raise HTTPException(
+            status_code=401,
+            detail=f"Invalid token: {str(e)}",
             headers={"WWW-Authenticate": "Bearer"},
         )
     except Exception as e:
-        # Log the full error for debugging
         error_msg = str(e)
         error_type = type(e).__name__
         raise HTTPException(
@@ -126,9 +121,9 @@ async def get_current_user(request: Request):
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-# Make clerk and get_current_user available to routes
-app.state.clerk = clerk
+# Make get_current_user and jwks_client available to routes
 app.state.get_current_user = get_current_user
+app.state.jwks_client = jwks_client
 
 @app.on_event("startup")
 async def startup_event():

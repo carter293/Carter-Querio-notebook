@@ -11,7 +11,7 @@ export function KeyboardShortcutsDialog({ open, onOpenChange }: KeyboardShortcut
   const modKey = isMac ? "⌘" : "Ctrl";
 
   const shortcuts = [
-    { keys: [modKey, "Enter"], description: "Run current cell" },
+    { keys: ["Shift", "Enter"], description: "Run current cell" },
     { keys: [modKey, "Shift", "↑"], description: "Focus previous cell" },
     { keys: [modKey, "Shift", "↓"], description: "Focus next cell" },
     { keys: [modKey, "K"], description: "Show keyboard shortcuts" },

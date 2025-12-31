@@ -2,8 +2,7 @@ from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, De
 from pydantic import BaseModel
 from typing import Optional, Dict, List, Union, Literal
 from urllib.parse import parse_qs
-import httpx
-from clerk_backend_api.security.types import AuthenticateRequestOptions
+import jwt
 from models import Notebook, Cell, CellType, CellStatus
 from ast_parser import extract_dependencies, extract_sql_dependencies
 from graph import rebuild_graph, detect_cycle
@@ -43,43 +42,37 @@ get_current_user_dependency = get_current_user_dependency_factory()
 # WebSocket Authentication Helpers
 # ============================================================================
 
-async def verify_clerk_token(token: str, clerk_client) -> Optional[str]:
+async def verify_clerk_token(token: str, jwks_client) -> Optional[str]:
     """
     Verify Clerk JWT token and extract user_id.
     
     Args:
         token: JWT token string (without "Bearer " prefix)
-        clerk_client: Clerk SDK client instance
+        jwks_client: PyJWKClient instance for JWT verification
         
     Returns:
         user_id if token is valid, None otherwise
     """
     try:
-        # Create a synthetic httpx request for token verification
-        # Build a minimal URL - Clerk only needs the token from the Authorization header
-        auth_header = f"Bearer {token}"
-        httpx_request = httpx.Request(
-            method="GET",
-            url="http://localhost:8000/",  # URL doesn't matter for token verification
-            headers={"authorization": auth_header}
+        # Get signing key from JWKS
+        signing_key = jwks_client.get_signing_key_from_jwt(token)
+        
+        # Decode and verify JWT token
+        decoded_token = jwt.decode(
+            token,
+            key=signing_key.key,
+            algorithms=["RS256"],
+            options={
+                "verify_exp": True,
+                "verify_aud": False,
+                "verify_iss": False,
+                "verify_iat": True,
+            },
+            leeway=0,
         )
         
-        # Use Clerk's authenticate_request method
-        request_state = clerk_client.authenticate_request(
-            httpx_request,
-            AuthenticateRequestOptions()
-        )
-        
-        if not request_state.is_signed_in:
-            return None
-            
-        # Extract user_id from token payload
-        payload = request_state.payload
-        if not payload:
-            return None
-            
-        user_id = payload.get("sub")
-        return user_id
+        # Extract user_id from 'sub' claim
+        return decoded_token.get("sub")
         
     except Exception as e:
         print(f"Token verification error: {e}")
@@ -558,9 +551,9 @@ async def notebook_websocket(websocket: WebSocket, notebook_id: str):
         await websocket.close(code=1008, reason="Missing token")
         return
     
-    # Step 3: Verify token using Clerk
-    clerk = websocket.app.state.clerk
-    user_id = await verify_clerk_token(token, clerk)
+    # Step 3: Verify token using JWT
+    jwks_client = websocket.app.state.jwks_client
+    user_id = await verify_clerk_token(token, jwks_client)
     
     if not user_id:
         await websocket.send_json({
@@ -639,7 +632,7 @@ async def notebook_websocket(websocket: WebSocket, notebook_id: str):
                     })
                     continue
                 
-                new_user_id = await verify_clerk_token(new_token, clerk)
+                new_user_id = await verify_clerk_token(new_token, jwks_client)
                 
                 if not new_user_id or new_user_id != user_id:
                     await websocket.send_json({
