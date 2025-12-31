@@ -7,11 +7,33 @@ from models import Notebook, Cell, CellType, CellStatus, Graph, KernelState, Out
 
 NOTEBOOKS_DIR = Path("notebooks")
 
-def ensure_notebooks_dir():
-    NOTEBOOKS_DIR.mkdir(exist_ok=True)
+# Flag to disable auto-save during tests
+DISABLE_AUTO_SAVE = os.environ.get("DISABLE_AUTO_SAVE", "false").lower() == "true"
 
-def save_notebook(notebook: Notebook) -> None:
-    ensure_notebooks_dir()
+def ensure_notebooks_dir(subdirectory: str = None):
+    """Ensure the notebooks directory exists.
+    
+    Args:
+        subdirectory: Optional subdirectory within NOTEBOOKS_DIR (e.g., 'test')
+    """
+    if subdirectory:
+        target_dir = NOTEBOOKS_DIR / subdirectory
+    else:
+        target_dir = NOTEBOOKS_DIR
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+def save_notebook(notebook: Notebook, subdirectory: str = None) -> None:
+    """Save a notebook to disk.
+    
+    Args:
+        notebook: The notebook to save
+        subdirectory: Optional subdirectory within NOTEBOOKS_DIR (e.g., 'test')
+    """
+    # Skip saving if auto-save is disabled (e.g., during tests)
+    if DISABLE_AUTO_SAVE:
+        return
+    
+    ensure_notebooks_dir(subdirectory)
 
     data = {
         "id": notebook.id,
@@ -41,12 +63,17 @@ def save_notebook(notebook: Notebook) -> None:
         ]
     }
 
-    file_path = NOTEBOOKS_DIR / f"{notebook.id}.json"
+    if subdirectory:
+        target_dir = NOTEBOOKS_DIR / subdirectory
+        file_path = target_dir / f"{notebook.id}.json"
+    else:
+        target_dir = NOTEBOOKS_DIR
+        file_path = target_dir / f"{notebook.id}.json"
     
     # Write to temporary file first (atomic write)
     with tempfile.NamedTemporaryFile(
         mode='w',
-        dir=NOTEBOOKS_DIR,
+        dir=target_dir,
         delete=False,
         suffix='.tmp',
         prefix=f'{notebook.id}_'
@@ -57,8 +84,17 @@ def save_notebook(notebook: Notebook) -> None:
     # Atomic rename (POSIX guarantees atomicity)
     os.replace(temp_path, file_path)
 
-def load_notebook(notebook_id: str) -> Notebook:
-    file_path = NOTEBOOKS_DIR / f"{notebook_id}.json"
+def load_notebook(notebook_id: str, subdirectory: str = None) -> Notebook:
+    """Load a notebook from disk.
+    
+    Args:
+        notebook_id: The ID of the notebook to load
+        subdirectory: Optional subdirectory within NOTEBOOKS_DIR (e.g., 'test')
+    """
+    if subdirectory:
+        file_path = NOTEBOOKS_DIR / subdirectory / f"{notebook_id}.json"
+    else:
+        file_path = NOTEBOOKS_DIR / f"{notebook_id}.json"
 
     with open(file_path, 'r') as f:
         data = json.load(f)

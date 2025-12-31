@@ -1,12 +1,7 @@
 import pytest
-import sys
-import os
-
-# Add backend to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-
 from models import Notebook, Cell, CellType, Graph
 from graph import rebuild_graph, detect_cycle, topological_sort, get_all_dependents
+from tests.test_utils import create_test_notebook, create_test_cell
 
 def test_rebuild_graph_simple():
     nb = Notebook(id="test", user_id="test-user")

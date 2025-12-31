@@ -534,6 +534,10 @@ export function NotebookApp() {
                   onDelete={() => deleteCell(cell.id)}
                   isFocused={focusedCellId === cell.id}
                   onFocus={() => setFocusedCellId(cell.id)}
+                  onFocusPreviousCell={() => focusCell("up")}
+                  onFocusNextCell={() => focusCell("down")}
+                  onToggleKeyboardShortcuts={() => setShowKeyboardShortcuts((prev) => !prev)}
+                  onToggleChat={() => setIsChatOpen((prev) => !prev)}
                 />
 
                 {/* Add Cell Buttons */}

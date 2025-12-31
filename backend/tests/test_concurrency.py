@@ -1,28 +1,27 @@
 import pytest
 import asyncio
-from backend.models import Notebook, Cell, CellType, CellStatus, Graph, KernelState
-from backend.notebook_operations import locked_update_cell, locked_create_cell, locked_delete_cell
+from models import Notebook, Cell, CellType, CellStatus, Graph, KernelState
+from notebook_operations import locked_update_cell, locked_create_cell, locked_delete_cell
+from tests.test_utils import create_test_notebook, create_test_cell
 
 
 @pytest.mark.asyncio
 async def test_concurrent_cell_updates():
     """Test that concurrent updates don't lose data."""
-    notebook = Notebook(
-        id="test-concurrency",
+    notebook = create_test_notebook(
+        notebook_id="test-concurrency",
         user_id="test-user",
         name="Test Notebook",
         cells=[
-            Cell(
-                id="cell1",
-                type=CellType.PYTHON,
+            create_test_cell(
+                cell_id="cell1",
+                cell_type=CellType.PYTHON,
                 code="x = 1",
                 status=CellStatus.IDLE,
                 reads=set(),
                 writes={"x"}
             )
-        ],
-        graph=Graph(),
-        kernel=KernelState(globals_dict={"__builtins__": __builtins__})
+        ]
     )
     
     # Simulate 50 concurrent updates
@@ -46,24 +45,22 @@ async def test_concurrent_cell_updates():
 @pytest.mark.asyncio
 async def test_optimistic_locking():
     """Test revision conflict detection."""
-    notebook = Notebook(
-        id="test-optimistic",
+    notebook = create_test_notebook(
+        notebook_id="test-optimistic",
         user_id="test-user",
         name="Test Notebook",
         cells=[
-            Cell(
-                id="cell1",
-                type=CellType.PYTHON,
+            create_test_cell(
+                cell_id="cell1",
+                cell_type=CellType.PYTHON,
                 code="x = 1",
                 status=CellStatus.IDLE,
                 reads=set(),
                 writes={"x"}
             )
-        ],
-        graph=Graph(),
-        kernel=KernelState(globals_dict={"__builtins__": __builtins__}),
-        revision=5
+        ]
     )
+    notebook.revision = 5
     
     # First update succeeds
     await locked_update_cell(notebook, "cell1", "x = 2", expected_revision=5)
@@ -81,13 +78,11 @@ async def test_optimistic_locking():
 @pytest.mark.asyncio
 async def test_concurrent_create_and_delete():
     """Test concurrent cell creation and deletion."""
-    notebook = Notebook(
-        id="test-create-delete",
+    notebook = create_test_notebook(
+        notebook_id="test-create-delete",
         user_id="test-user",
         name="Test Notebook",
-        cells=[],
-        graph=Graph(),
-        kernel=KernelState(globals_dict={"__builtins__": __builtins__})
+        cells=[]
     )
     
     # Create 10 cells concurrently
@@ -104,13 +99,11 @@ async def test_concurrent_create_and_delete():
 @pytest.mark.asyncio
 async def test_concurrent_create_delete_mixed():
     """Test concurrent creation and deletion don't corrupt state."""
-    notebook = Notebook(
-        id="test-mixed",
+    notebook = create_test_notebook(
+        notebook_id="test-mixed",
         user_id="test-user",
         name="Test Notebook",
-        cells=[],
-        graph=Graph(),
-        kernel=KernelState(globals_dict={"__builtins__": __builtins__})
+        cells=[]
     )
     
     # Create 5 cells

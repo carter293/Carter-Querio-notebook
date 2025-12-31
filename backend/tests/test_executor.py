@@ -1,12 +1,7 @@
 import pytest
-import sys
-import os
-
-# Add backend to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-
 from models import Cell, CellType, CellStatus
 from executor import execute_python_cell, ExecutionResult
+from tests.test_utils import create_test_cell
 
 @pytest.mark.asyncio
 async def test_execute_simple_assignment():

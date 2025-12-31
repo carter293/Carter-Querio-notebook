@@ -1,10 +1,4 @@
 import pytest
-import sys
-import os
-
-# Add backend to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-
 from ast_parser import extract_dependencies, extract_sql_dependencies, substitute_sql_variables
 
 def test_extract_simple_assignment():

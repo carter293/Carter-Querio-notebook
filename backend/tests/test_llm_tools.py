@@ -36,23 +36,26 @@ class MockScheduler:
 @pytest.fixture
 def notebook():
     """Create test notebook."""
-    return Notebook(
-        id="test-notebook",
+    from tests.test_utils import create_test_notebook, create_test_cell
+    
+    nb = create_test_notebook(
+        notebook_id="test-notebook",
         user_id="test-user",
         name="Test Notebook",
         cells=[
-            Cell(
-                id="cell1",
-                type=CellType.PYTHON,
+            create_test_cell(
+                cell_id="cell1",
+                cell_type=CellType.PYTHON,
                 code="x = 1",
                 status=CellStatus.SUCCESS,
                 reads=set(),
                 writes={"x"}
             )
-        ],
-        graph=Graph(),
-        kernel=KernelState(globals_dict={"__builtins__": __builtins__, "x": 1})
+        ]
     )
+    # Add x to the kernel globals
+    nb.kernel.globals_dict["x"] = 1
+    return nb
 
 
 @pytest.fixture
