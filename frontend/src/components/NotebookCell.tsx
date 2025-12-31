@@ -5,9 +5,8 @@ import { Badge } from "./ui/badge";
 import { Play, Trash2, Loader2, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
 import type { CellData } from "./NotebookApp";
 import { OutputRenderer } from "./OutputRenderer";
-import Editor from "@monaco-editor/react";
-
-
+import Editor, { type Monaco } from "@monaco-editor/react";
+import type { editor } from "monaco-editor";
 
 interface NotebookCellProps {
   cell: CellData;
@@ -36,13 +35,38 @@ export function NotebookCell({
   onToggleChat
 }: NotebookCellProps) {
   const [localCode, setLocalCode] = useState(cell.code);
-  const editorRef = useRef<any>(null);
+  const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const hasUnsavedChangesRef = useRef(false);
+  
+  // Store the latest callbacks in refs to avoid stale closures
+  const callbacksRef = useRef({
+    onFocusPreviousCell,
+    onFocusNextCell,
+    onToggleKeyboardShortcuts,
+    onToggleChat,
+  });
+
+  // Update refs when callbacks change
+  useEffect(() => {
+    callbacksRef.current = {
+      onFocusPreviousCell,
+      onFocusNextCell,
+      onToggleKeyboardShortcuts,
+      onToggleChat,
+    };
+  }, [onFocusPreviousCell, onFocusNextCell, onToggleKeyboardShortcuts, onToggleChat]);
 
   useEffect(() => {
     setLocalCode(cell.code);
     hasUnsavedChangesRef.current = false;
   }, [cell.code]);
+
+  // Focus the editor when this cell becomes focused
+  useEffect(() => {
+    if (isFocused && editorRef.current) {
+      editorRef.current.focus();
+    }
+  }, [isFocused]);
 
   const handleEditorChange = (value: string | undefined) => {
     if (value !== undefined) {
@@ -70,42 +94,90 @@ export function NotebookCell({
     onRun();
   };
 
-  const handleEditorMount = (editor: any, monaco: any) => {
-    editorRef.current = editor;
+  const handleEditorMount = (editorInstance: editor.IStandaloneCodeEditor, monaco: Monaco) => {
+    editorRef.current = editorInstance;
 
     // Save on blur (when user clicks away from editor)
-    editor.onDidBlurEditorText(() => {
+    editorInstance.onDidBlurEditorText(() => {
       handleEditorBlur();
     });
 
-    // Shift+Enter to run cell (Jupyter standard)
-    editor.addCommand(monaco.KeyMod.Shift | monaco.KeyCode.Enter, () => {
-      handleRun();
+    // Use addKeybindingRules for global keybindings (disable defaults)
+    monaco.editor.addKeybindingRules([
+      {
+        // Disable default F1 (command palette)
+        keybinding: monaco.KeyCode.F1,
+        command: null,
+      },
+      {
+        // Disable default F8 (go to next error)
+        keybinding: monaco.KeyCode.F8,
+        command: null,
+      },
+      {
+        // Disable default F9 (toggle breakpoint)
+        keybinding: monaco.KeyCode.F9,
+        command: null,
+      },
+    ]);
+
+    // Register custom actions with keybindings
+    // For instance-specific actions, keybindings must be in the action definition
+    // Use callbacksRef.current to always get the latest callbacks (avoid stale closures)
+    editorInstance.addAction({
+      id: `notebook-cell-run-${cell.id}`,
+      label: 'Run Cell',
+      keybindings: [
+        monaco.KeyMod.Shift | monaco.KeyCode.Enter,
+      ],
+      run: () => {
+        handleRun();
+      },
     });
     
-    // Ctrl/Cmd+Shift+Up - Focus previous cell
-    editor.addCommand(
-      monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.UpArrow,
-      () => onFocusPreviousCell()
-    );
+    editorInstance.addAction({
+      id: `notebook-cell-focus-previous-${cell.id}`,
+      label: 'Focus Previous Cell',
+      keybindings: [
+        monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.UpArrow,
+      ],
+      run: () => {
+        callbacksRef.current.onFocusPreviousCell();
+      },
+    });
     
-    // Ctrl/Cmd+Shift+Down - Focus next cell
-    editor.addCommand(
-      monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.DownArrow,
-      () => onFocusNextCell()
-    );
+    editorInstance.addAction({
+      id: `notebook-cell-focus-next-${cell.id}`,
+      label: 'Focus Next Cell',
+      keybindings: [
+        monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.DownArrow,
+      ],
+      run: () => {
+        callbacksRef.current.onFocusNextCell();
+      },
+    });
     
-    // Cmd/Ctrl+K - Show keyboard shortcuts
-    editor.addCommand(
-      monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK,
-      () => onToggleKeyboardShortcuts()
-    );
+    editorInstance.addAction({
+      id: `notebook-cell-show-shortcuts-${cell.id}`,
+      label: 'Show Keyboard Shortcuts',
+      keybindings: [
+        monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK,
+      ],
+      run: () => {
+        callbacksRef.current.onToggleKeyboardShortcuts();
+      },
+    });
     
-    // Cmd/Ctrl+B - Toggle chat panel
-    editor.addCommand(
-      monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyB,
-      () => onToggleChat()
-    );
+    editorInstance.addAction({
+      id: `notebook-cell-toggle-chat-${cell.id}`,
+      label: 'Toggle Chat Panel',
+      keybindings: [
+        monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyB,
+      ],
+      run: () => {
+        callbacksRef.current.onToggleChat();
+      },
+    });
   };
 
   const statusConfig = {

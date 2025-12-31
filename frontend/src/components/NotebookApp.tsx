@@ -236,7 +236,7 @@ export function NotebookApp() {
     sendMessage({ type: 'run_cell', cellId: id });
   };
 
-  const focusCell = (direction: "up" | "down") => {
+  const focusCell = useCallback((direction: "up" | "down") => {
     if (!focusedCellId) {
       setFocusedCellId(cells[0]?.id || null);
       return;
@@ -251,7 +251,7 @@ export function NotebookApp() {
       setFocusedCellId(nextId);
       cellRefs.current.get(nextId)?.scrollIntoView({ behavior: "smooth", block: "center" });
     }
-  };
+  }, [focusedCellId, cells]);
 
   const handleDbConnectionUpdate = async () => {
     if (!notebookId) return;
@@ -322,6 +322,13 @@ export function NotebookApp() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if the event comes from inside a Monaco editor
+      // Monaco editors handle their own keybindings
+      const target = e.target as HTMLElement;
+      if (target.closest('.monaco-editor')) {
+        return;
+      }
+
       const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
       const modKey = isMac ? e.metaKey : e.ctrlKey;
 
