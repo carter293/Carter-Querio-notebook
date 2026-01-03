@@ -1,14 +1,14 @@
 // API client wrapper using generated OpenAPI client
 import {
-  listNotebooksEndpointApiNotebooksGet,
-  createNotebookApiNotebooksPost,
-  getNotebookApiNotebooksNotebookIdGet,
-  updateDbConnectionApiNotebooksNotebookIdDbPut,
-  renameNotebookApiNotebooksNotebookIdNamePut,
-  deleteNotebookEndpointApiNotebooksNotebookIdDelete,
-  createCellApiNotebooksNotebookIdCellsPost,
-  updateCellApiNotebooksNotebookIdCellsCellIdPut,
-  deleteCellApiNotebooksNotebookIdCellsCellIdDelete,
+  listNotebooksEndpointApiV1NotebooksGet,
+  createNotebookApiV1NotebooksPost,
+  getNotebookApiV1NotebooksNotebookIdGet,
+  updateDbConnectionApiV1NotebooksNotebookIdDbPut,
+  renameNotebookApiV1NotebooksNotebookIdNamePut,
+  deleteNotebookEndpointApiV1NotebooksNotebookIdDelete,
+  createCellApiV1NotebooksNotebookIdCellsPost,
+  updateCellApiV1NotebooksNotebookIdCellsCellIdPut,
+  deleteCellApiV1NotebooksNotebookIdCellsCellIdDelete,
 } from './client';
 import { client } from './client/client.gen';
 
@@ -150,7 +150,7 @@ async function handleApiError(response: Response, operation: string): Promise<vo
 
 // Notebook operations
 export async function createNotebook(): Promise<{ notebook_id: string }> {
-  const result = await createNotebookApiNotebooksPost();
+  const result = await createNotebookApiV1NotebooksPost();
   
   if (!result.response.ok) {
     await handleApiError(result.response, 'create notebook');
@@ -160,7 +160,7 @@ export async function createNotebook(): Promise<{ notebook_id: string }> {
 }
 
 export async function getNotebook(id: string): Promise<Notebook> {
-  const result = await getNotebookApiNotebooksNotebookIdGet({
+  const result = await getNotebookApiV1NotebooksNotebookIdGet({
     path: { notebook_id: id },
   });
   
@@ -172,7 +172,7 @@ export async function getNotebook(id: string): Promise<Notebook> {
 }
 
 export async function listNotebooks(): Promise<NotebookMetadataResponse[]> {
-  const result = await listNotebooksEndpointApiNotebooksGet();
+  const result = await listNotebooksEndpointApiV1NotebooksGet();
   
   if (!result.response.ok) {
     await handleApiError(result.response, 'list notebooks');
@@ -184,7 +184,7 @@ export async function listNotebooks(): Promise<NotebookMetadataResponse[]> {
 }
 
 export async function updateDbConnection(id: string, connString: string): Promise<void> {
-  const result = await updateDbConnectionApiNotebooksNotebookIdDbPut({
+  const result = await updateDbConnectionApiV1NotebooksNotebookIdDbPut({
     path: { notebook_id: id },
     body: { connection_string: connString },
   });
@@ -195,7 +195,7 @@ export async function updateDbConnection(id: string, connString: string): Promis
 }
 
 export async function renameNotebook(notebookId: string, name: string): Promise<void> {
-  const result = await renameNotebookApiNotebooksNotebookIdNamePut({
+  const result = await renameNotebookApiV1NotebooksNotebookIdNamePut({
     path: { notebook_id: notebookId },
     body: { name },
   });
@@ -206,7 +206,7 @@ export async function renameNotebook(notebookId: string, name: string): Promise<
 }
 
 export async function deleteNotebook(notebookId: string): Promise<void> {
-  const result = await deleteNotebookEndpointApiNotebooksNotebookIdDelete({
+  const result = await deleteNotebookEndpointApiV1NotebooksNotebookIdDelete({
     path: { notebook_id: notebookId },
   });
   
@@ -221,7 +221,7 @@ export async function createCell(
   type: 'python' | 'sql', 
   afterCellId?: string
 ): Promise<{ cell_id: string }> {
-  const result = await createCellApiNotebooksNotebookIdCellsPost({
+  const result = await createCellApiV1NotebooksNotebookIdCellsPost({
     path: { notebook_id: notebookId },
     body: { 
       type,
@@ -237,7 +237,7 @@ export async function createCell(
 }
 
 export async function updateCell(notebookId: string, cellId: string, code: string): Promise<void> {
-  const result = await updateCellApiNotebooksNotebookIdCellsCellIdPut({
+  const result = await updateCellApiV1NotebooksNotebookIdCellsCellIdPut({
     path: {
       notebook_id: notebookId,
       cell_id: cellId,
@@ -251,7 +251,7 @@ export async function updateCell(notebookId: string, cellId: string, code: strin
 }
 
 export async function deleteCell(notebookId: string, cellId: string): Promise<void> {
-  const result = await deleteCellApiNotebooksNotebookIdCellsCellIdDelete({
+  const result = await deleteCellApiV1NotebooksNotebookIdCellsCellIdDelete({
     path: {
       notebook_id: notebookId,
       cell_id: cellId,

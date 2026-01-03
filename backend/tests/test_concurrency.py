@@ -1,7 +1,7 @@
 import pytest
 import asyncio
-from models import Notebook, Cell, CellType, CellStatus, Graph, KernelState
-from notebook_operations import locked_update_cell, locked_create_cell, locked_delete_cell
+from app.models import Notebook, Cell, CellType, CellStatus, Graph, KernelState
+from app.services import locked_update_cell, locked_create_cell, locked_delete_cell
 from tests.test_utils import create_test_notebook, create_test_cell
 
 

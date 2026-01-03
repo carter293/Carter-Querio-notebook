@@ -250,39 +250,39 @@ export type ValidationError = {
     type: string;
 };
 
-export type ListNotebooksEndpointApiNotebooksGetData = {
+export type ListNotebooksEndpointApiV1NotebooksGetData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/notebooks';
+    url: '/api/v1/notebooks/';
 };
 
-export type ListNotebooksEndpointApiNotebooksGetResponses = {
+export type ListNotebooksEndpointApiV1NotebooksGetResponses = {
     /**
      * Successful Response
      */
     200: ListNotebooksResponse;
 };
 
-export type ListNotebooksEndpointApiNotebooksGetResponse = ListNotebooksEndpointApiNotebooksGetResponses[keyof ListNotebooksEndpointApiNotebooksGetResponses];
+export type ListNotebooksEndpointApiV1NotebooksGetResponse = ListNotebooksEndpointApiV1NotebooksGetResponses[keyof ListNotebooksEndpointApiV1NotebooksGetResponses];
 
-export type CreateNotebookApiNotebooksPostData = {
+export type CreateNotebookApiV1NotebooksPostData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/notebooks';
+    url: '/api/v1/notebooks/';
 };
 
-export type CreateNotebookApiNotebooksPostResponses = {
+export type CreateNotebookApiV1NotebooksPostResponses = {
     /**
      * Successful Response
      */
     200: CreateNotebookResponse;
 };
 
-export type CreateNotebookApiNotebooksPostResponse = CreateNotebookApiNotebooksPostResponses[keyof CreateNotebookApiNotebooksPostResponses];
+export type CreateNotebookApiV1NotebooksPostResponse = CreateNotebookApiV1NotebooksPostResponses[keyof CreateNotebookApiV1NotebooksPostResponses];
 
-export type DeleteNotebookEndpointApiNotebooksNotebookIdDeleteData = {
+export type DeleteNotebookEndpointApiV1NotebooksNotebookIdDeleteData = {
     body?: never;
     path: {
         /**
@@ -291,26 +291,26 @@ export type DeleteNotebookEndpointApiNotebooksNotebookIdDeleteData = {
         notebook_id: string;
     };
     query?: never;
-    url: '/api/notebooks/{notebook_id}';
+    url: '/api/v1/notebooks/{notebook_id}';
 };
 
-export type DeleteNotebookEndpointApiNotebooksNotebookIdDeleteErrors = {
+export type DeleteNotebookEndpointApiV1NotebooksNotebookIdDeleteErrors = {
     /**
      * Validation Error
      */
     422: HttpValidationError;
 };
 
-export type DeleteNotebookEndpointApiNotebooksNotebookIdDeleteError = DeleteNotebookEndpointApiNotebooksNotebookIdDeleteErrors[keyof DeleteNotebookEndpointApiNotebooksNotebookIdDeleteErrors];
+export type DeleteNotebookEndpointApiV1NotebooksNotebookIdDeleteError = DeleteNotebookEndpointApiV1NotebooksNotebookIdDeleteErrors[keyof DeleteNotebookEndpointApiV1NotebooksNotebookIdDeleteErrors];
 
-export type DeleteNotebookEndpointApiNotebooksNotebookIdDeleteResponses = {
+export type DeleteNotebookEndpointApiV1NotebooksNotebookIdDeleteResponses = {
     /**
      * Successful Response
      */
     200: unknown;
 };
 
-export type GetNotebookApiNotebooksNotebookIdGetData = {
+export type GetNotebookApiV1NotebooksNotebookIdGetData = {
     body?: never;
     path: {
         /**
@@ -319,28 +319,28 @@ export type GetNotebookApiNotebooksNotebookIdGetData = {
         notebook_id: string;
     };
     query?: never;
-    url: '/api/notebooks/{notebook_id}';
+    url: '/api/v1/notebooks/{notebook_id}';
 };
 
-export type GetNotebookApiNotebooksNotebookIdGetErrors = {
+export type GetNotebookApiV1NotebooksNotebookIdGetErrors = {
     /**
      * Validation Error
      */
     422: HttpValidationError;
 };
 
-export type GetNotebookApiNotebooksNotebookIdGetError = GetNotebookApiNotebooksNotebookIdGetErrors[keyof GetNotebookApiNotebooksNotebookIdGetErrors];
+export type GetNotebookApiV1NotebooksNotebookIdGetError = GetNotebookApiV1NotebooksNotebookIdGetErrors[keyof GetNotebookApiV1NotebooksNotebookIdGetErrors];
 
-export type GetNotebookApiNotebooksNotebookIdGetResponses = {
+export type GetNotebookApiV1NotebooksNotebookIdGetResponses = {
     /**
      * Successful Response
      */
     200: NotebookResponse;
 };
 
-export type GetNotebookApiNotebooksNotebookIdGetResponse = GetNotebookApiNotebooksNotebookIdGetResponses[keyof GetNotebookApiNotebooksNotebookIdGetResponses];
+export type GetNotebookApiV1NotebooksNotebookIdGetResponse = GetNotebookApiV1NotebooksNotebookIdGetResponses[keyof GetNotebookApiV1NotebooksNotebookIdGetResponses];
 
-export type UpdateDbConnectionApiNotebooksNotebookIdDbPutData = {
+export type UpdateDbConnectionApiV1NotebooksNotebookIdDbPutData = {
     body: UpdateDbConnectionRequest;
     path: {
         /**
@@ -349,26 +349,26 @@ export type UpdateDbConnectionApiNotebooksNotebookIdDbPutData = {
         notebook_id: string;
     };
     query?: never;
-    url: '/api/notebooks/{notebook_id}/db';
+    url: '/api/v1/notebooks/{notebook_id}/db';
 };
 
-export type UpdateDbConnectionApiNotebooksNotebookIdDbPutErrors = {
+export type UpdateDbConnectionApiV1NotebooksNotebookIdDbPutErrors = {
     /**
      * Validation Error
      */
     422: HttpValidationError;
 };
 
-export type UpdateDbConnectionApiNotebooksNotebookIdDbPutError = UpdateDbConnectionApiNotebooksNotebookIdDbPutErrors[keyof UpdateDbConnectionApiNotebooksNotebookIdDbPutErrors];
+export type UpdateDbConnectionApiV1NotebooksNotebookIdDbPutError = UpdateDbConnectionApiV1NotebooksNotebookIdDbPutErrors[keyof UpdateDbConnectionApiV1NotebooksNotebookIdDbPutErrors];
 
-export type UpdateDbConnectionApiNotebooksNotebookIdDbPutResponses = {
+export type UpdateDbConnectionApiV1NotebooksNotebookIdDbPutResponses = {
     /**
      * Successful Response
      */
     200: unknown;
 };
 
-export type RenameNotebookApiNotebooksNotebookIdNamePutData = {
+export type RenameNotebookApiV1NotebooksNotebookIdNamePutData = {
     body: RenameNotebookRequest;
     path: {
         /**
@@ -377,26 +377,26 @@ export type RenameNotebookApiNotebooksNotebookIdNamePutData = {
         notebook_id: string;
     };
     query?: never;
-    url: '/api/notebooks/{notebook_id}/name';
+    url: '/api/v1/notebooks/{notebook_id}/name';
 };
 
-export type RenameNotebookApiNotebooksNotebookIdNamePutErrors = {
+export type RenameNotebookApiV1NotebooksNotebookIdNamePutErrors = {
     /**
      * Validation Error
      */
     422: HttpValidationError;
 };
 
-export type RenameNotebookApiNotebooksNotebookIdNamePutError = RenameNotebookApiNotebooksNotebookIdNamePutErrors[keyof RenameNotebookApiNotebooksNotebookIdNamePutErrors];
+export type RenameNotebookApiV1NotebooksNotebookIdNamePutError = RenameNotebookApiV1NotebooksNotebookIdNamePutErrors[keyof RenameNotebookApiV1NotebooksNotebookIdNamePutErrors];
 
-export type RenameNotebookApiNotebooksNotebookIdNamePutResponses = {
+export type RenameNotebookApiV1NotebooksNotebookIdNamePutResponses = {
     /**
      * Successful Response
      */
     200: unknown;
 };
 
-export type CreateCellApiNotebooksNotebookIdCellsPostData = {
+export type CreateCellApiV1NotebooksNotebookIdCellsPostData = {
     body: CreateCellRequest;
     path: {
         /**
@@ -405,28 +405,28 @@ export type CreateCellApiNotebooksNotebookIdCellsPostData = {
         notebook_id: string;
     };
     query?: never;
-    url: '/api/notebooks/{notebook_id}/cells';
+    url: '/api/v1/notebooks/{notebook_id}/cells';
 };
 
-export type CreateCellApiNotebooksNotebookIdCellsPostErrors = {
+export type CreateCellApiV1NotebooksNotebookIdCellsPostErrors = {
     /**
      * Validation Error
      */
     422: HttpValidationError;
 };
 
-export type CreateCellApiNotebooksNotebookIdCellsPostError = CreateCellApiNotebooksNotebookIdCellsPostErrors[keyof CreateCellApiNotebooksNotebookIdCellsPostErrors];
+export type CreateCellApiV1NotebooksNotebookIdCellsPostError = CreateCellApiV1NotebooksNotebookIdCellsPostErrors[keyof CreateCellApiV1NotebooksNotebookIdCellsPostErrors];
 
-export type CreateCellApiNotebooksNotebookIdCellsPostResponses = {
+export type CreateCellApiV1NotebooksNotebookIdCellsPostResponses = {
     /**
      * Successful Response
      */
     200: CreateCellResponse;
 };
 
-export type CreateCellApiNotebooksNotebookIdCellsPostResponse = CreateCellApiNotebooksNotebookIdCellsPostResponses[keyof CreateCellApiNotebooksNotebookIdCellsPostResponses];
+export type CreateCellApiV1NotebooksNotebookIdCellsPostResponse = CreateCellApiV1NotebooksNotebookIdCellsPostResponses[keyof CreateCellApiV1NotebooksNotebookIdCellsPostResponses];
 
-export type DeleteCellApiNotebooksNotebookIdCellsCellIdDeleteData = {
+export type DeleteCellApiV1NotebooksNotebookIdCellsCellIdDeleteData = {
     body?: never;
     path: {
         /**
@@ -439,26 +439,26 @@ export type DeleteCellApiNotebooksNotebookIdCellsCellIdDeleteData = {
         cell_id: string;
     };
     query?: never;
-    url: '/api/notebooks/{notebook_id}/cells/{cell_id}';
+    url: '/api/v1/notebooks/{notebook_id}/cells/{cell_id}';
 };
 
-export type DeleteCellApiNotebooksNotebookIdCellsCellIdDeleteErrors = {
+export type DeleteCellApiV1NotebooksNotebookIdCellsCellIdDeleteErrors = {
     /**
      * Validation Error
      */
     422: HttpValidationError;
 };
 
-export type DeleteCellApiNotebooksNotebookIdCellsCellIdDeleteError = DeleteCellApiNotebooksNotebookIdCellsCellIdDeleteErrors[keyof DeleteCellApiNotebooksNotebookIdCellsCellIdDeleteErrors];
+export type DeleteCellApiV1NotebooksNotebookIdCellsCellIdDeleteError = DeleteCellApiV1NotebooksNotebookIdCellsCellIdDeleteErrors[keyof DeleteCellApiV1NotebooksNotebookIdCellsCellIdDeleteErrors];
 
-export type DeleteCellApiNotebooksNotebookIdCellsCellIdDeleteResponses = {
+export type DeleteCellApiV1NotebooksNotebookIdCellsCellIdDeleteResponses = {
     /**
      * Successful Response
      */
     200: unknown;
 };
 
-export type UpdateCellApiNotebooksNotebookIdCellsCellIdPutData = {
+export type UpdateCellApiV1NotebooksNotebookIdCellsCellIdPutData = {
     body: UpdateCellRequest;
     path: {
         /**
@@ -471,26 +471,26 @@ export type UpdateCellApiNotebooksNotebookIdCellsCellIdPutData = {
         cell_id: string;
     };
     query?: never;
-    url: '/api/notebooks/{notebook_id}/cells/{cell_id}';
+    url: '/api/v1/notebooks/{notebook_id}/cells/{cell_id}';
 };
 
-export type UpdateCellApiNotebooksNotebookIdCellsCellIdPutErrors = {
+export type UpdateCellApiV1NotebooksNotebookIdCellsCellIdPutErrors = {
     /**
      * Validation Error
      */
     422: HttpValidationError;
 };
 
-export type UpdateCellApiNotebooksNotebookIdCellsCellIdPutError = UpdateCellApiNotebooksNotebookIdCellsCellIdPutErrors[keyof UpdateCellApiNotebooksNotebookIdCellsCellIdPutErrors];
+export type UpdateCellApiV1NotebooksNotebookIdCellsCellIdPutError = UpdateCellApiV1NotebooksNotebookIdCellsCellIdPutErrors[keyof UpdateCellApiV1NotebooksNotebookIdCellsCellIdPutErrors];
 
-export type UpdateCellApiNotebooksNotebookIdCellsCellIdPutResponses = {
+export type UpdateCellApiV1NotebooksNotebookIdCellsCellIdPutResponses = {
     /**
      * Successful Response
      */
     200: unknown;
 };
 
-export type ChatWithNotebookApiChatNotebookIdPostData = {
+export type ChatWithNotebookApiV1ChatChatNotebookIdPostData = {
     body: ChatRequest;
     path: {
         /**
@@ -499,19 +499,19 @@ export type ChatWithNotebookApiChatNotebookIdPostData = {
         notebook_id: string;
     };
     query?: never;
-    url: '/api/chat/{notebook_id}';
+    url: '/api/v1/chat/chat/{notebook_id}';
 };
 
-export type ChatWithNotebookApiChatNotebookIdPostErrors = {
+export type ChatWithNotebookApiV1ChatChatNotebookIdPostErrors = {
     /**
      * Validation Error
      */
     422: HttpValidationError;
 };
 
-export type ChatWithNotebookApiChatNotebookIdPostError = ChatWithNotebookApiChatNotebookIdPostErrors[keyof ChatWithNotebookApiChatNotebookIdPostErrors];
+export type ChatWithNotebookApiV1ChatChatNotebookIdPostError = ChatWithNotebookApiV1ChatChatNotebookIdPostErrors[keyof ChatWithNotebookApiV1ChatChatNotebookIdPostErrors];
 
-export type ChatWithNotebookApiChatNotebookIdPostResponses = {
+export type ChatWithNotebookApiV1ChatChatNotebookIdPostResponses = {
     /**
      * Successful Response
      */

@@ -1,6 +1,6 @@
 import pytest
-from models import Notebook, Cell, CellType, Graph
-from graph import rebuild_graph, detect_cycle, topological_sort, get_all_dependents
+from app.models import Notebook, Cell, CellType, Graph
+from app.execution.dependencies import rebuild_graph, detect_cycle, topological_sort, get_all_dependents
 from tests.test_utils import create_test_notebook, create_test_cell
 
 def test_rebuild_graph_simple():

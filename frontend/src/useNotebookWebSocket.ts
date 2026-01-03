@@ -50,7 +50,7 @@ export function useNotebookWebSocket(
 
   // Only connect when we have both notebookId and token
   const socketUrl = notebookId && token
-    ? `${WS_BASE_URL}/api/ws/notebooks/${notebookId}`
+    ? `${WS_BASE_URL}/api/v1/ws/notebooks/${notebookId}`
     : null;
 
   const {

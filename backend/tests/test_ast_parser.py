@@ -1,5 +1,5 @@
 import pytest
-from ast_parser import extract_dependencies, extract_sql_dependencies, substitute_sql_variables
+from app.utils.ast_parser import extract_dependencies, extract_sql_dependencies, substitute_sql_variables
 
 def test_extract_simple_assignment():
     code = "x = 5"

@@ -5,8 +5,8 @@ import os
 # Add backend to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from storage import load_notebook
-from models import Notebook, Cell, CellType, CellStatus, Graph, KernelState
+from app.storage import load_notebook
+from app.models import Notebook, Cell, CellType, CellStatus, Graph, KernelState
 
 
 def load_test_notebook(notebook_id: str) -> Notebook:

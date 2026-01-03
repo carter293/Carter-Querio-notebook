@@ -188,7 +188,21 @@ async def execute_sql_cell(cell, conn_string: str, globals_dict: Dict[str, Any])
             # Convert to dict format
             if result:
                 columns = list(result[0].keys())
-                rows = [list(record.values()) for record in result]
+                
+                # Convert rows, handling non-JSON-serializable types (dates, decimals, etc.)
+                rows = []
+                for record in result:
+                    row = []
+                    for value in record.values():
+                        # Convert dates/datetimes to ISO format strings
+                        if hasattr(value, 'isoformat'):
+                            row.append(value.isoformat())
+                        # Convert decimals to float
+                        elif hasattr(value, '__float__') and type(value).__name__ == 'Decimal':
+                            row.append(float(value))
+                        else:
+                            row.append(value)
+                    rows.append(row)
 
                 # Limit rows to prevent UI overload
                 MAX_ROWS = 1000

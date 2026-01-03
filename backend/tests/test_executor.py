@@ -1,6 +1,6 @@
 import pytest
-from models import Cell, CellType, CellStatus
-from executor import execute_python_cell, ExecutionResult
+from app.models import Cell, CellType, CellStatus
+from app.execution import execute_python_cell, ExecutionResult
 from tests.test_utils import create_test_cell
 
 @pytest.mark.asyncio

@@ -1,7 +1,7 @@
 import pytest
 import asyncio
-from models import Notebook, Cell, CellType, CellStatus, Graph, KernelState
-from llm_tools import (
+from app.models import Notebook, Cell, CellType, CellStatus, Graph, KernelState
+from app.utils.llm_tools import (
     tool_get_notebook_state,
     tool_create_cell,
     tool_update_cell,
@@ -130,7 +130,7 @@ async def test_delete_cell(notebook, broadcaster):
 @pytest.mark.asyncio
 async def test_create_output_preview():
     """Test output preview creation."""
-    from models import Output
+    from app.models import Output
     
     # Test empty outputs
     cell = Cell(id="cell1", type=CellType.PYTHON, code="", outputs=[])
