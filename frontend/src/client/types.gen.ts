@@ -8,12 +8,18 @@ export type CellResponse = {
      * Id
      */
     id: string;
-    type: CellType;
+    /**
+     * Type
+     */
+    type: 'python' | 'sql';
     /**
      * Code
      */
     code: string;
-    status: CellStatus;
+    /**
+     * Status
+     */
+    status?: 'idle' | 'running' | 'success' | 'error' | 'blocked';
     /**
      * Stdout
      */
@@ -21,7 +27,7 @@ export type CellResponse = {
     /**
      * Outputs
      */
-    outputs: Array<OutputResponse>;
+    outputs?: Array<OutputResponse>;
     /**
      * Error
      */
@@ -29,52 +35,21 @@ export type CellResponse = {
     /**
      * Reads
      */
-    reads: Array<string>;
+    reads?: Array<string>;
     /**
      * Writes
      */
-    writes: Array<string>;
-};
-
-/**
- * CellStatus
- */
-export type CellStatus = 'idle' | 'running' | 'success' | 'error' | 'blocked';
-
-/**
- * CellType
- */
-export type CellType = 'python' | 'sql';
-
-/**
- * ChatMessage
- */
-export type ChatMessage = {
-    /**
-     * Role
-     */
-    role: string;
-    /**
-     * Content
-     */
-    content: string;
-};
-
-/**
- * ChatRequest
- */
-export type ChatRequest = {
-    /**
-     * Messages
-     */
-    messages: Array<ChatMessage>;
+    writes?: Array<string>;
 };
 
 /**
  * CreateCellRequest
  */
 export type CreateCellRequest = {
-    type: CellType;
+    /**
+     * Type
+     */
+    type: 'python' | 'sql';
     /**
      * After Cell Id
      */
@@ -154,7 +129,7 @@ export type NotebookResponse = {
     /**
      * Cells
      */
-    cells: Array<CellResponse>;
+    cells?: Array<CellResponse>;
 };
 
 /**
@@ -175,7 +150,7 @@ export type OutputResponse = {
      * Metadata
      */
     metadata?: {
-        [key: string]: string | number | number;
+        [key: string]: string | number;
     } | null;
 };
 
@@ -191,13 +166,12 @@ export type RenameNotebookRequest = {
 
 /**
  * TableData
- * Table data structure for pandas DataFrames and SQL results
  */
 export type TableData = {
     /**
      * Type
      */
-    type: 'table';
+    type?: 'table';
     /**
      * Columns
      */
@@ -340,34 +314,6 @@ export type GetNotebookApiV1NotebooksNotebookIdGetResponses = {
 
 export type GetNotebookApiV1NotebooksNotebookIdGetResponse = GetNotebookApiV1NotebooksNotebookIdGetResponses[keyof GetNotebookApiV1NotebooksNotebookIdGetResponses];
 
-export type UpdateDbConnectionApiV1NotebooksNotebookIdDbPutData = {
-    body: UpdateDbConnectionRequest;
-    path: {
-        /**
-         * Notebook Id
-         */
-        notebook_id: string;
-    };
-    query?: never;
-    url: '/api/v1/notebooks/{notebook_id}/db';
-};
-
-export type UpdateDbConnectionApiV1NotebooksNotebookIdDbPutErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type UpdateDbConnectionApiV1NotebooksNotebookIdDbPutError = UpdateDbConnectionApiV1NotebooksNotebookIdDbPutErrors[keyof UpdateDbConnectionApiV1NotebooksNotebookIdDbPutErrors];
-
-export type UpdateDbConnectionApiV1NotebooksNotebookIdDbPutResponses = {
-    /**
-     * Successful Response
-     */
-    200: unknown;
-};
-
 export type RenameNotebookApiV1NotebooksNotebookIdNamePutData = {
     body: RenameNotebookRequest;
     path: {
@@ -396,6 +342,34 @@ export type RenameNotebookApiV1NotebooksNotebookIdNamePutResponses = {
     200: unknown;
 };
 
+export type UpdateDbConnectionApiV1NotebooksNotebookIdDbPutData = {
+    body: UpdateDbConnectionRequest;
+    path: {
+        /**
+         * Notebook Id
+         */
+        notebook_id: string;
+    };
+    query?: never;
+    url: '/api/v1/notebooks/{notebook_id}/db';
+};
+
+export type UpdateDbConnectionApiV1NotebooksNotebookIdDbPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateDbConnectionApiV1NotebooksNotebookIdDbPutError = UpdateDbConnectionApiV1NotebooksNotebookIdDbPutErrors[keyof UpdateDbConnectionApiV1NotebooksNotebookIdDbPutErrors];
+
+export type UpdateDbConnectionApiV1NotebooksNotebookIdDbPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
 export type CreateCellApiV1NotebooksNotebookIdCellsPostData = {
     body: CreateCellRequest;
     path: {
@@ -405,7 +379,7 @@ export type CreateCellApiV1NotebooksNotebookIdCellsPostData = {
         notebook_id: string;
     };
     query?: never;
-    url: '/api/v1/notebooks/{notebook_id}/cells';
+    url: '/api/v1/notebooks/{notebook_id}/cells/';
 };
 
 export type CreateCellApiV1NotebooksNotebookIdCellsPostErrors = {
@@ -490,42 +464,14 @@ export type UpdateCellApiV1NotebooksNotebookIdCellsCellIdPutResponses = {
     200: unknown;
 };
 
-export type ChatWithNotebookApiV1ChatChatNotebookIdPostData = {
-    body: ChatRequest;
-    path: {
-        /**
-         * Notebook Id
-         */
-        notebook_id: string;
-    };
-    query?: never;
-    url: '/api/v1/chat/chat/{notebook_id}';
-};
-
-export type ChatWithNotebookApiV1ChatChatNotebookIdPostErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type ChatWithNotebookApiV1ChatChatNotebookIdPostError = ChatWithNotebookApiV1ChatChatNotebookIdPostErrors[keyof ChatWithNotebookApiV1ChatChatNotebookIdPostErrors];
-
-export type ChatWithNotebookApiV1ChatChatNotebookIdPostResponses = {
-    /**
-     * Successful Response
-     */
-    200: unknown;
-};
-
-export type HealthHealthGetData = {
+export type HealthCheckHealthGetData = {
     body?: never;
     path?: never;
     query?: never;
     url: '/health';
 };
 
-export type HealthHealthGetResponses = {
+export type HealthCheckHealthGetResponses = {
     /**
      * Successful Response
      */

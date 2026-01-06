@@ -15,11 +15,9 @@ interface NotebookCellProps {
   onDelete: () => void;
   isFocused: boolean;
   onFocus: () => void;
-  // Application-level keyboard shortcuts
   onFocusPreviousCell: () => void;
   onFocusNextCell: () => void;
   onToggleKeyboardShortcuts: () => void;
-  onToggleChat: () => void;
 }
 
 export function NotebookCell({ 
@@ -32,7 +30,6 @@ export function NotebookCell({
   onFocusPreviousCell,
   onFocusNextCell,
   onToggleKeyboardShortcuts,
-  onToggleChat
 }: NotebookCellProps) {
   const [localCode, setLocalCode] = useState(cell.code);
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
@@ -43,7 +40,6 @@ export function NotebookCell({
     onFocusPreviousCell,
     onFocusNextCell,
     onToggleKeyboardShortcuts,
-    onToggleChat,
   });
 
   // Update refs when callbacks change
@@ -52,9 +48,8 @@ export function NotebookCell({
       onFocusPreviousCell,
       onFocusNextCell,
       onToggleKeyboardShortcuts,
-      onToggleChat,
     };
-  }, [onFocusPreviousCell, onFocusNextCell, onToggleKeyboardShortcuts, onToggleChat]);
+  }, [onFocusPreviousCell, onFocusNextCell, onToggleKeyboardShortcuts]);
 
   useEffect(() => {
     setLocalCode(cell.code);
@@ -167,17 +162,6 @@ export function NotebookCell({
         callbacksRef.current.onToggleKeyboardShortcuts();
       },
     });
-    
-    editorInstance.addAction({
-      id: `notebook-cell-toggle-chat-${cell.id}`,
-      label: 'Toggle Chat Panel',
-      keybindings: [
-        monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyB,
-      ],
-      run: () => {
-        callbacksRef.current.onToggleChat();
-      },
-    });
   };
 
   const statusConfig = {
@@ -270,16 +254,16 @@ export function NotebookCell({
       )}
 
       {/* Metadata */}
-      {(cell.reads.length > 0 || cell.writes.length > 0) && (
+      {((cell.reads?.length ?? 0) > 0 || (cell.writes?.length ?? 0) > 0) && (
         <div className="border-t border-border bg-card px-4 py-2 text-xs text-muted-foreground">
-          {cell.reads.length > 0 && (
+          {(cell.reads?.length ?? 0) > 0 && (
             <span className="mr-4">
-              Reads: <code className="font-mono">{cell.reads.join(", ")}</code>
+              Reads: <code className="font-mono">{cell.reads?.join(", ")}</code>
             </span>
           )}
-          {cell.writes.length > 0 && (
+          {(cell.writes?.length ?? 0) > 0 && (
             <span>
-              Writes: <code className="font-mono">{cell.writes.join(", ")}</code>
+              Writes: <code className="font-mono">{cell.writes?.join(", ")}</code>
             </span>
           )}
         </div>

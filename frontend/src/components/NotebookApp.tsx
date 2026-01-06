@@ -1,16 +1,14 @@
-import { useState, useRef, useEffect, useCallback } from "react";
-import { useAuth, UserButton } from "@clerk/clerk-react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { NotebookCell } from "./NotebookCell";
-import { ChatPanel } from "./ChatPanel";
 import { KeyboardShortcutsDialog } from "./KeyboardShortcutsDialog";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-import { Plus, MessageSquare, Keyboard, FileText, Pencil, Trash2 } from "lucide-react";
+import { Plus, Keyboard, FileText, Pencil, Trash2 } from "lucide-react";
 import * as api from "../api-client";
-import { useNotebookWebSocket } from "../useNotebookWebSocket";
-import type { Cell, CellType, CellStatus } from "../api-client";
+import { WSMessage, useNotebookWebSocket } from "../useNotebookWebSocket";
+import type { Cell, CellType, CellStatus, NotebookMetadata } from "../api-client";
 
 export type { CellType, CellStatus };
 
@@ -19,69 +17,49 @@ export interface CellData extends Cell {
 }
 
 export function NotebookApp() {
-  const { getToken } = useAuth();
   const { notebookId: urlNotebookId } = useParams<{ notebookId?: string }>();
   const navigate = useNavigate();
+
   const [cells, setCells] = useState<CellData[]>([]);
   const [focusedCellId, setFocusedCellId] = useState<string | null>(null);
-  const [isChatOpen, setIsChatOpen] = useState(true);
   const [dbConnection, setDbConnection] = useState("");
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false);
-  const [notebookId, setNotebookId] = useState<string | null>(urlNotebookId || null);
-  const [notebooks, setNotebooks] = useState<api.NotebookMetadata[]>([]);
-  const [authToken, setAuthToken] = useState<string | null>(null);  // Keep for WebSocket only
-  const [isInitialized, setIsInitialized] = useState(false);
+  const cellRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const [notebookId, setNotebookId] = useState<string | null>(null);
+  const [notebooks, setNotebooks] = useState<NotebookMetadata[]>([]);
   const [renamingNotebookId, setRenamingNotebookId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [notebookSelectOpen, setNotebookSelectOpen] = useState(false);
   const [isRenamingCurrent, setIsRenamingCurrent] = useState(false);
   const [currentNotebookRenameValue, setCurrentNotebookRenameValue] = useState("");
-  const cellRefs = useRef<Map<string, HTMLDivElement>>(new Map());
-
-  // Get token for WebSocket (separate from HTTP which uses interceptor)
-  // Fetch fresh token whenever notebook changes to ensure WebSocket has valid auth
-  useEffect(() => {
-    async function fetchTokenForWs() {
-      const token = await getToken();
-      setAuthToken(token);
-    }
-    fetchTokenForWs();
-  }, [getToken, notebookId]);  // Re-fetch when notebook changes
-
-  // Update URL when notebookId changes
-  useEffect(() => {
-    if (notebookId && notebookId !== urlNotebookId) {
-      navigate(`/notebook/${notebookId}`, { replace: true });
-    }
-  }, [notebookId, urlNotebookId, navigate]);
+  const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
     if (isInitialized) return;
 
-    async function loadData() {
+    // Load notebook list on mount
+    async function loadNotebooks() {
       try {
-        // No need to get token - interceptor handles it
-        const notebookList = await api.listNotebooks();
-        setNotebooks(notebookList);
+        const notebooks = await api.listNotebooks();
+        setNotebooks(notebooks);
 
-        // If we have a notebook ID from the URL, verify it exists
+        // If we have a notebook ID from URL, verify it exists
         if (urlNotebookId) {
-          const notebookExists = notebookList.some(nb => nb.id === urlNotebookId);
+          const notebookExists = notebooks.some(nb => nb.id === urlNotebookId);
           if (notebookExists) {
             setNotebookId(urlNotebookId);
-          } else {
-            // URL notebook doesn't exist, fall back to first notebook
-            if (notebookList.length > 0) {
-              const firstNotebook = notebookList[0];
-              setNotebookId(firstNotebook.id);
-            }
+          } else if (notebooks.length > 0) {
+            setNotebookId(notebooks[0].id);
           }
+        } else if (notebooks.length > 0) {
+          setNotebookId(notebooks[0].id);
         } else {
-          // No URL notebook, auto-select first notebook if available
-          if (notebookList.length > 0) {
-            const firstNotebook = notebookList[0];
-            setNotebookId(firstNotebook.id);
-          }
+          // Create a new notebook if none exist
+          const response = await api.createNotebook();
+          setNotebookId(response.notebook_id);
+          // Reload notebooks list to include the newly created one
+          const updatedNotebooks = await api.listNotebooks();
+          setNotebooks(updatedNotebooks);
         }
 
         setIsInitialized(true);
@@ -89,28 +67,28 @@ export function NotebookApp() {
         console.error("Failed to load notebooks:", err);
       }
     }
-    loadData();
+
+    loadNotebooks();
   }, [isInitialized, urlNotebookId]);
 
-  // Load notebook data when notebookId changes
   useEffect(() => {
-    if (!notebookId) return;
-
-    async function loadNotebook(id: string) {
-      try {
-        // No need to check authToken - interceptor handles it
-        const notebook = await api.getNotebook(id);
+    // Load notebook cells when notebookId changes
+    if (notebookId) {
+      api.getNotebook(notebookId).then(notebook => {
         setCells(notebook.cells || []);
         setDbConnection(notebook.db_conn_string || "");
-      } catch (err) {
-        console.error("Failed to load notebook:", err);
-      }
+      });
     }
-    loadNotebook(notebookId);
   }, [notebookId]);
 
-  // WebSocket message handler - memoized to prevent reconnection loops
-  const handleWebSocketMessage = useCallback((msg: any) => {
+  // Update URL when notebookId changes
+  useEffect(() => {
+    if (notebookId && notebookId !== urlNotebookId) {
+      navigate(`/notebook/${notebookId}`, { replace: true });
+    }
+  }, [notebookId, urlNotebookId, navigate]);
+  
+  const handleWebSocketMessage = useCallback((msg: WSMessage) => {
     switch (msg.type) {
       case "cell_updated":
         setCells((prev) =>
@@ -185,8 +163,6 @@ export function NotebookApp() {
 
   // Connect WebSocket - only when we have both notebookId and token
   const { sendMessage } = useNotebookWebSocket(
-    notebookId,
-    notebookId && authToken ? authToken : null,
     { onMessage: handleWebSocketMessage }
   );
 
@@ -266,10 +242,9 @@ export function NotebookApp() {
   const handleCreateNotebook = async () => {
     try {
       const { notebook_id } = await api.createNotebook();
-      const notebookList = await api.listNotebooks();
-      setNotebooks(notebookList);
+      const updatedNotebooks = await api.listNotebooks();
+      setNotebooks(updatedNotebooks);
       setNotebookId(notebook_id);
-      // URL will be updated by the useEffect that watches notebookId
     } catch (err) {
       console.error("Failed to create notebook:", err);
     }
@@ -280,11 +255,10 @@ export function NotebookApp() {
 
     try {
       await api.renameNotebook(id, name);
-      const notebookList = await api.listNotebooks();
-      setNotebooks(notebookList);
+      const updatedNotebooks = await api.listNotebooks();
+      setNotebooks(updatedNotebooks);
       setRenamingNotebookId(null);
       setRenameValue("");
-      // Only open select if this was an in-dropdown rename
       if (keepSelectOpen) {
         setNotebookSelectOpen(true);
       }
@@ -294,25 +268,27 @@ export function NotebookApp() {
   };
 
   const handleDeleteNotebook = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this notebook?")) {
+      return;
+    }
+
     try {
       await api.deleteNotebook(id);
-      
+
       // Refresh notebook list
-      const notebookList = await api.listNotebooks();
-      setNotebooks(notebookList);
-      
-      // If the deleted notebook was currently selected, switch to another
+      const updatedNotebooks = await api.listNotebooks();
+      setNotebooks(updatedNotebooks);
+
+      // If deleted notebook was selected, switch to another
       if (notebookId === id) {
-        if (notebookList.length > 0) {
-          setNotebookId(notebookList[0].id);
-          // URL will be updated by the useEffect that watches notebookId
+        if (updatedNotebooks.length > 0) {
+          setNotebookId(updatedNotebooks[0].id);
         } else {
           setNotebookId(null);
           setCells([]);
-          navigate('/', { replace: true });
         }
       }
-      
+
       setNotebookSelectOpen(false);
     } catch (err) {
       console.error("Failed to delete notebook:", err);
@@ -320,60 +296,56 @@ export function NotebookApp() {
     }
   };
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore if the event comes from inside a Monaco editor
-      // Monaco editors handle their own keybindings
-      const target = e.target as HTMLElement;
-      if (target.closest('.monaco-editor')) {
-        return;
-      }
+  // potentially do not need
+  // useEffect(() => {
+  //   const handleKeyDown = (e: KeyboardEvent) => {
+  //     // Ignore if the event comes from inside a Monaco editor
+  //     // Monaco editors handle their own keybindings
+  //     const target = e.target as HTMLElement;
+  //     if (target.closest('.monaco-editor')) {
+  //       return;
+  //     }
 
-      const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
-      const modKey = isMac ? e.metaKey : e.ctrlKey;
+  //     const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
+  //     const modKey = isMac ? e.metaKey : e.ctrlKey;
 
-      // Cmd/Ctrl + Shift + Up/Down - Navigate cells
-      if (modKey && e.shiftKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
-        e.preventDefault();
-        focusCell(e.key === "ArrowUp" ? "up" : "down");
-      }
+  //     // Cmd/Ctrl + Shift + Up/Down - Navigate cells
+  //     if (modKey && e.shiftKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+  //       e.preventDefault();
+  //       focusCell(e.key === "ArrowUp" ? "up" : "down");
+  //     }
 
-      // Cmd/Ctrl + K - Toggle keyboard shortcuts
-      if (modKey && e.key === "k") {
-        e.preventDefault();
-        setShowKeyboardShortcuts((prev) => !prev);
-      }
+  //     // Cmd/Ctrl + K - Toggle keyboard shortcuts
+  //     if (modKey && e.key === "k") {
+  //       e.preventDefault();
+  //       setShowKeyboardShortcuts((prev) => !prev);
+  //     }
 
-      // Cmd/Ctrl + B - Toggle chat
-      if (modKey && e.key === "b") {
-        e.preventDefault();
-        setIsChatOpen((prev) => !prev);
-      }
-    };
+  //   };
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [focusedCellId, cells]);
+  //   window.addEventListener("keydown", handleKeyDown);
+  //   return () => window.removeEventListener("keydown", handleKeyDown);
+  // }, [focusedCellId, cells]);
 
   return (
     <div className="flex h-screen bg-background text-foreground dark">
       {/* Left: Notebook Area */}
-      <div className={`flex flex-col transition-all duration-300 ${isChatOpen ? "w-2/3" : "w-full"}`}>
+      <div className={`flex flex-col transition-all duration-300 w-full`}>
         {/* Header */}
         <header className="flex items-center justify-between gap-2 border-b border-border bg-card px-3 py-2 lg:px-6 lg:py-3">
           {/* Left side */}
-            <div className="flex items-center gap-2 lg:gap-4 min-w-0 flex-1">
+          <div className="flex items-center gap-2 lg:gap-4 min-w-0 flex-1">
             {/* Title - hidden on small screens, shown on medium+ */}
             <h1 className="hidden md:block font-mono text-lg lg:text-xl font-semibold whitespace-nowrap">
               Reactive Notebook
             </h1>
 
-            {/* Notebook Selector - responsive width */}
+            {/* Notebook Selector */}
             <div className="flex items-center gap-1 lg:gap-2 min-w-0 flex-1 md:flex-initial">
               {isRenamingCurrent ? (
                 <Pencil className="h-4 w-4 text-muted-foreground shrink-0" />
               ) : (
-                <div 
+                <div
                   className="group/icon cursor-pointer"
                   onClick={() => {
                     if (notebookId) {
@@ -387,7 +359,7 @@ export function NotebookApp() {
                   <Pencil className="h-4 w-4 text-muted-foreground shrink-0 hidden group-hover/icon:block" />
                 </div>
               )}
-              
+
               {isRenamingCurrent ? (
                 <Input
                   value={currentNotebookRenameValue}
@@ -410,8 +382,8 @@ export function NotebookApp() {
                   className="h-10 w-full md:w-[200px] lg:w-[250px]"
                 />
               ) : (
-                <Select 
-                  value={notebookId || ""} 
+                <Select
+                  value={notebookId || ""}
                   open={notebookSelectOpen}
                   onOpenChange={(open: boolean) => {
                     // Don't close if we're in rename mode
@@ -431,64 +403,64 @@ export function NotebookApp() {
                   <SelectTrigger className="w-full md:w-[200px] lg:w-[250px]">
                     <SelectValue placeholder="Choose a notebook" />
                   </SelectTrigger>
-                <SelectContent>
-                  {notebooks.map((nb) => (
-                    <div key={nb.id} className="relative group">
-                      {renamingNotebookId === nb.id ? (
-                        <div className="flex items-center gap-1 px-2 py-1.5">
-                          <Input
-                            value={renameValue}
-                            onChange={(e) => setRenameValue(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") {
-                                handleRenameNotebook(nb.id, renameValue);
-                              } else if (e.key === "Escape") {
-                                setRenamingNotebookId(null);
-                                setRenameValue("");
-                              }
-                            }}
-                            onBlur={() => {
-                              if (renameValue.trim()) {
-                                handleRenameNotebook(nb.id, renameValue);
-                              } else {
-                                setRenamingNotebookId(null);
-                                setRenameValue("");
-                              }
-                            }}
-                            autoFocus
-                            className="h-7 text-sm"
-                            onClick={(e) => e.stopPropagation()}
-                          />
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-between pr-2">
-                          <SelectItem value={nb.id} className="flex-1">
-                            {nb.name || nb.id}
-                          </SelectItem>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteNotebook(nb.id);
-                            }}
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                  <SelectItem value="__create_new__" className="text-primary">
-                    + Create New Notebook
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+                  <SelectContent>
+                    {notebooks.map((nb) => (
+                      <div key={nb.id} className="relative group">
+                        {renamingNotebookId === nb.id ? (
+                          <div className="flex items-center gap-1 px-2 py-1.5">
+                            <Input
+                              value={renameValue}
+                              onChange={(e) => setRenameValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  handleRenameNotebook(nb.id, renameValue);
+                                } else if (e.key === "Escape") {
+                                  setRenamingNotebookId(null);
+                                  setRenameValue("");
+                                }
+                              }}
+                              onBlur={() => {
+                                if (renameValue.trim()) {
+                                  handleRenameNotebook(nb.id, renameValue);
+                                } else {
+                                  setRenamingNotebookId(null);
+                                  setRenameValue("");
+                                }
+                              }}
+                              autoFocus
+                              className="h-7 text-sm"
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between pr-2">
+                            <SelectItem value={nb.id} className="flex-1">
+                              {nb.name || nb.id}
+                            </SelectItem>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteNotebook(nb.id);
+                              }}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    <SelectItem value="__create_new__" className="text-primary">
+                      + Create New Notebook
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
               )}
             </div>
 
-            {/* Keyboard shortcuts - hidden on small screens */}
+            {/* Keyboard shortcuts button */}
             <Button
               variant="ghost"
               size="icon"
@@ -500,9 +472,8 @@ export function NotebookApp() {
             </Button>
           </div>
 
-          {/* Right side */}
+          {/* Right side - DB Connection */}
           <div className="flex items-center gap-1 lg:gap-2 shrink-0">
-            {/* DB Connection - hidden on small/medium, shown on large */}
             <Input
               placeholder="PostgreSQL connection string..."
               value={dbConnection}
@@ -510,22 +481,6 @@ export function NotebookApp() {
               onBlur={handleDbConnectionUpdate}
               className="hidden xl:block w-64 2xl:w-80"
             />
-
-            {/* Chat toggle */}
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setIsChatOpen(!isChatOpen)}
-              title="Toggle chat (⌘B)"
-              className="shrink-0"
-            >
-              <MessageSquare className="h-4 w-4" />
-            </Button>
-
-            {/* User Profile Button */}
-            <div className="shrink-0">
-              <UserButton afterSignOutUrl="/" />
-            </div>
           </div>
         </header>
 
@@ -546,11 +501,10 @@ export function NotebookApp() {
                   onFocusPreviousCell={() => focusCell("up")}
                   onFocusNextCell={() => focusCell("down")}
                   onToggleKeyboardShortcuts={() => setShowKeyboardShortcuts((prev) => !prev)}
-                  onToggleChat={() => setIsChatOpen((prev) => !prev)}
                 />
 
                 {/* Add Cell Buttons */}
-                <div className="flex justify-center gap-2 py-2 opacity-0 hover:opacity-100 transition-opacity">
+                <div className="flex justify-center gap-2 py-2 transition-opacity">
                   <Button variant="ghost" size="sm" onClick={() => addCell("python", cell.id)} className="h-7 text-xs">
                     <Plus className="mr-1 h-3 w-3" />
                     Python
@@ -581,8 +535,6 @@ export function NotebookApp() {
           </div>
         </div>
       </div>
-      {/* Right: Chat Panel */}
-      <ChatPanel isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} notebookId={notebookId} />
       {/* Keyboard Shortcuts Dialog */}
       <KeyboardShortcutsDialog open={showKeyboardShortcuts} onOpenChange={setShowKeyboardShortcuts} />
     </div>

@@ -1,133 +1,81 @@
+"""Tests for dependency graph."""
 import pytest
-from app.models import Notebook, Cell, CellType, Graph
-from app.execution.dependencies import rebuild_graph, detect_cycle, topological_sort, get_all_dependents
-from tests.test_utils import create_test_notebook, create_test_cell
+from app.core.graph import DependencyGraph, CycleDetectedError
 
-def test_rebuild_graph_simple():
-    nb = Notebook(id="test", user_id="test-user")
 
-    cell_a = Cell(id="a", type=CellType.PYTHON, code="x = 1")
-    cell_a.writes = {'x'}
+def test_simple_chain():
+    """Test A → B → C dependency chain."""
+    graph = DependencyGraph()
+    graph.update_cell('c1', reads=set(), writes={'x'})
+    graph.update_cell('c2', reads={'x'}, writes={'y'})
+    graph.update_cell('c3', reads={'y'}, writes={'z'})
 
-    cell_b = Cell(id="b", type=CellType.PYTHON, code="y = x + 1")
-    cell_b.reads = {'x'}
-    cell_b.writes = {'y'}
+    # Changing c1 should trigger c1, c2, c3
+    order = graph.get_execution_order('c1')
+    assert order == ['c1', 'c2', 'c3']
 
-    nb.cells = [cell_a, cell_b]
-    rebuild_graph(nb)
 
-    assert 'b' in nb.graph.edges['a']
+def test_diamond_pattern():
+    """Test A → B, C → D pattern."""
+    graph = DependencyGraph()
+    graph.update_cell('a', reads=set(), writes={'x'})
+    graph.update_cell('b', reads={'x'}, writes={'y'})
+    graph.update_cell('c', reads={'x'}, writes={'z'})
+    graph.update_cell('d', reads={'y', 'z'}, writes={'result'})
 
-def test_rebuild_graph_multiple_deps():
-    nb = Notebook(id="test", user_id="test-user")
+    # Changing 'a' should trigger all cells
+    order = graph.get_execution_order('a')
+    assert set(order) == {'a', 'b', 'c', 'd'}
+    assert order[0] == 'a'  # 'a' comes first
+    # 'b' and 'c' can be in any order (both depend on 'a')
+    # 'd' must come last (depends on both 'b' and 'c')
+    assert order[-1] == 'd'
 
-    cell_a = Cell(id="a", type=CellType.PYTHON, code="x = 1")
-    cell_a.writes = {'x'}
 
-    cell_b = Cell(id="b", type=CellType.PYTHON, code="y = 2")
-    cell_b.writes = {'y'}
+def test_no_dependencies():
+    """Test independent cells."""
+    graph = DependencyGraph()
+    graph.update_cell('c1', reads=set(), writes={'x'})
+    graph.update_cell('c2', reads=set(), writes={'y'})
 
-    cell_c = Cell(id="c", type=CellType.PYTHON, code="z = x + y")
-    cell_c.reads = {'x', 'y'}
-    cell_c.writes = {'z'}
+    # Changing c1 should only trigger c1
+    order = graph.get_execution_order('c1')
+    assert order == ['c1']
 
-    nb.cells = [cell_a, cell_b, cell_c]
-    rebuild_graph(nb)
 
-    assert 'c' in nb.graph.edges['a']
-    assert 'c' in nb.graph.edges['b']
+def test_cycle_detection():
+    """Test that cycles are detected and rejected."""
+    graph = DependencyGraph()
+    graph.update_cell('c1', reads=set(), writes={'x'})
+    graph.update_cell('c2', reads={'x'}, writes={'y'})
 
-def test_detect_cycle_simple():
-    nb = Notebook(id="test", user_id="test-user")
+    # Creating a cycle: c1 reads y (which c2 writes)
+    with pytest.raises(CycleDetectedError):
+        graph.update_cell('c1', reads={'y'}, writes={'x'})
 
-    cell_a = Cell(id="a", type=CellType.PYTHON, code="")
-    cell_b = Cell(id="b", type=CellType.PYTHON, code="")
 
-    nb.cells = [cell_a, cell_b]
-    nb.graph.add_edge('a', 'b')
-    nb.graph.add_edge('b', 'a')
+def test_variable_shadowing():
+    """Test that variable redefinition works correctly."""
+    graph = DependencyGraph()
+    graph.update_cell('c1', reads=set(), writes={'x'})
+    graph.update_cell('c2', reads={'x'}, writes={'y'})
 
-    cycle = detect_cycle(nb.graph, 'a')
-    assert cycle is not None
+    # c3 also writes 'x', shadowing c1's definition
+    graph.update_cell('c3', reads=set(), writes={'x'})
 
-def test_detect_cycle_none():
-    nb = Notebook(id="test", user_id="test-user")
+    # Now c2 should depend on c3 (latest writer of 'x')
+    order = graph.get_execution_order('c3')
+    assert 'c2' in order
 
-    cell_a = Cell(id="a", type=CellType.PYTHON, code="")
-    cell_b = Cell(id="b", type=CellType.PYTHON, code="")
 
-    nb.cells = [cell_a, cell_b]
-    nb.graph.add_edge('a', 'b')
+def test_remove_cell():
+    """Test that removing a cell updates the graph."""
+    graph = DependencyGraph()
+    graph.update_cell('c1', reads=set(), writes={'x'})
+    graph.update_cell('c2', reads={'x'}, writes={'y'})
 
-    cycle = detect_cycle(nb.graph, 'a')
-    assert cycle is None
+    graph.remove_cell('c1')
 
-def test_topological_sort_linear():
-    nb = Notebook(id="test", user_id="test-user")
-    nb.graph.add_edge('a', 'b')
-    nb.graph.add_edge('b', 'c')
-
-    result = topological_sort(nb.graph, {'a', 'b', 'c'})
-
-    # a must come before b, b before c
-    assert result.index('a') < result.index('b')
-    assert result.index('b') < result.index('c')
-
-def test_topological_sort_diamond():
-    nb = Notebook(id="test", user_id="test-user")
-    nb.graph.add_edge('a', 'b')
-    nb.graph.add_edge('a', 'c')
-    nb.graph.add_edge('b', 'd')
-    nb.graph.add_edge('c', 'd')
-
-    result = topological_sort(nb.graph, {'a', 'b', 'c', 'd'})
-
-    # a must come first, d must come last
-    assert result[0] == 'a'
-    assert result[-1] == 'd'
-    # b and c can be in any order
-    assert result.index('b') < result.index('d')
-    assert result.index('c') < result.index('d')
-
-def test_topological_sort_cycle():
-    nb = Notebook(id="test", user_id="test-user")
-    nb.graph.add_edge('a', 'b')
-    nb.graph.add_edge('b', 'a')
-
-    with pytest.raises(ValueError):
-        topological_sort(nb.graph, {'a', 'b'})
-
-def test_get_all_dependents_linear():
-    nb = Notebook(id="test", user_id="test-user")
-    nb.graph.add_edge('a', 'b')
-    nb.graph.add_edge('b', 'c')
-
-    deps = get_all_dependents(nb.graph, 'a')
-    assert deps == {'b', 'c'}
-
-def test_get_all_dependents_diamond():
-    nb = Notebook(id="test", user_id="test-user")
-    nb.graph.add_edge('a', 'b')
-    nb.graph.add_edge('b', 'c')
-    nb.graph.add_edge('a', 'd')
-
-    deps = get_all_dependents(nb.graph, 'a')
-    assert deps == {'b', 'c', 'd'}
-
-def test_get_all_dependents_none():
-    nb = Notebook(id="test", user_id="test-user")
-    nb.graph.add_edge('a', 'b')
-
-    deps = get_all_dependents(nb.graph, 'b')
-    assert deps == set()
-
-def test_graph_remove_cell():
-    graph = Graph()
-    graph.add_edge('a', 'b')
-    graph.add_edge('b', 'c')
-
-    graph.remove_cell('b')
-
-    assert 'b' not in graph.edges.get('a', set())
-    assert 'b' not in graph.edges
-    assert 'b' not in graph.reverse_edges
+    # c2 should now have no dependencies
+    order = graph.get_execution_order('c2')
+    assert order == ['c2']

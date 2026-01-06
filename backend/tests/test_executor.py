@@ -1,76 +1,90 @@
+"""Tests for code executor."""
 import pytest
-from app.models import Cell, CellType, CellStatus
-from app.execution import execute_python_cell, ExecutionResult
-from tests.test_utils import create_test_cell
+from app.core.executor import PythonExecutor, SQLExecutor
 
-@pytest.mark.asyncio
-async def test_execute_simple_assignment():
-    cell = Cell(id="test", type=CellType.PYTHON, code="x = 5")
-    globals_dict = {"__builtins__": __builtins__}
 
-    result = await execute_python_cell(cell, globals_dict)
+def test_simple_execution():
+    """Test basic code execution."""
+    executor = PythonExecutor()
+    result = executor.execute("x = 10")
 
-    assert result.status == CellStatus.SUCCESS
-    assert globals_dict['x'] == 5
+    assert result.status == 'success'
+    assert executor.globals_dict['x'] == 10
 
-@pytest.mark.asyncio
-async def test_execute_with_stdout():
-    cell = Cell(id="test", type=CellType.PYTHON, code="print('hello world')")
-    globals_dict = {"__builtins__": __builtins__}
 
-    result = await execute_python_cell(cell, globals_dict)
+def test_stdout_capture():
+    """Test that print statements are captured."""
+    executor = PythonExecutor()
+    result = executor.execute("print('Hello, world!')")
 
-    assert result.status == CellStatus.SUCCESS
-    assert result.stdout == "hello world\n"
+    assert result.status == 'success'
+    assert result.stdout == 'Hello, world!\n'
 
-@pytest.mark.asyncio
-async def test_execute_with_dependency():
-    globals_dict = {"__builtins__": __builtins__, "x": 10}
-    cell = Cell(id="test", type=CellType.PYTHON, code="y = x * 2")
 
-    result = await execute_python_cell(cell, globals_dict)
+def test_expression_result():
+    """Test that final expression results are captured."""
+    executor = PythonExecutor()
+    result = executor.execute("2 + 2")
 
-    assert result.status == CellStatus.SUCCESS
-    assert globals_dict['y'] == 20
+    assert result.status == 'success'
+    assert len(result.outputs) == 1
+    assert result.outputs[0].mime_type == 'text/plain'
+    assert result.outputs[0].data == '4'
 
-@pytest.mark.asyncio
-async def test_execute_syntax_error():
-    cell = Cell(id="test", type=CellType.PYTHON, code="x = (")
-    globals_dict = {"__builtins__": __builtins__}
 
-    result = await execute_python_cell(cell, globals_dict)
+def test_stateful_execution():
+    """Test that variables persist across executions."""
+    executor = PythonExecutor()
 
-    assert result.status == CellStatus.ERROR
-    assert "SyntaxError" in result.error
+    # First cell
+    result1 = executor.execute("x = 10")
+    assert result1.status == 'success'
 
-@pytest.mark.asyncio
-async def test_execute_runtime_error():
-    cell = Cell(id="test", type=CellType.PYTHON, code="x = 1 / 0")
-    globals_dict = {"__builtins__": __builtins__}
+    # Second cell uses variable from first
+    result2 = executor.execute("y = x * 2")
+    assert result2.status == 'success'
+    assert executor.globals_dict['y'] == 20
 
-    result = await execute_python_cell(cell, globals_dict)
 
-    assert result.status == CellStatus.ERROR
-    assert "ZeroDivisionError" in result.error
+def test_syntax_error():
+    """Test that syntax errors are captured."""
+    executor = PythonExecutor()
+    result = executor.execute("x = (")
 
-@pytest.mark.asyncio
-async def test_execute_name_error():
-    cell = Cell(id="test", type=CellType.PYTHON, code="y = undefined_var")
-    globals_dict = {"__builtins__": __builtins__}
+    assert result.status == 'error'
+    assert result.error is not None
+    assert 'SyntaxError' in result.error
 
-    result = await execute_python_cell(cell, globals_dict)
 
-    assert result.status == CellStatus.ERROR
-    assert "NameError" in result.error
+def test_runtime_error():
+    """Test that runtime errors are captured."""
+    executor = PythonExecutor()
+    result = executor.execute("1 / 0")
 
-@pytest.mark.asyncio
-async def test_execute_multiple_statements():
-    cell = Cell(id="test", type=CellType.PYTHON, code="x = 5\ny = x * 2\nprint(y)")
-    globals_dict = {"__builtins__": __builtins__}
+    assert result.status == 'error'
+    assert result.error is not None
+    assert 'ZeroDivisionError' in result.error
 
-    result = await execute_python_cell(cell, globals_dict)
 
-    assert result.status == CellStatus.SUCCESS
-    assert globals_dict['x'] == 5
-    assert globals_dict['y'] == 10
-    assert result.stdout == "10\n"
+def test_sql_template_substitution():
+    """Test SQL variable substitution."""
+    executor = SQLExecutor()
+    result = executor.execute(
+        "SELECT * FROM users WHERE id = {user_id}",
+        variables={'user_id': 42}
+    )
+
+    assert result.status == 'success'
+    assert 'id = 42' in result.stdout
+
+
+def test_sql_missing_variable():
+    """Test SQL with missing variable."""
+    executor = SQLExecutor()
+    result = executor.execute(
+        "SELECT * FROM users WHERE id = {user_id}",
+        variables={}
+    )
+
+    assert result.status == 'error'
+    assert 'user_id' in result.error
