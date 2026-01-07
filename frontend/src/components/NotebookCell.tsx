@@ -114,7 +114,6 @@ export function NotebookCell({
   const handleRun = async () => {
     // Get the current code directly from the editor to avoid stale state
     const currentCode = editorRef.current?.getValue() ?? localCode;
-    console.log('handleRun called, currentCode:', currentCode);
 
     // Cancel auto-save timer if active
     if (autoSaveTimer) {
@@ -122,11 +121,9 @@ export function NotebookCell({
       setAutoSaveTimer(null);
     }
 
-    console.log('handleRun: sending update');
     // Always send update to ensure kernel has latest code before running
     await onUpdateCode(currentCode);
 
-    console.log('handleRun: calling onRun');
     // Then run the cell
     onRun();
   };
