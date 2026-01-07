@@ -2,7 +2,7 @@
 import asyncio
 from multiprocessing import Queue
 from typing import Dict
-from .types import ExecuteRequest, ExecutionResult
+from .types import ExecuteRequest
 from ..core.ast_parser import extract_python_dependencies, extract_sql_dependencies
 from ..core.graph import DependencyGraph, CycleDetectedError
 from ..core.executor import PythonExecutor, SQLExecutor
@@ -206,7 +206,6 @@ def kernel_main(input_queue: Queue, output_queue: Queue):
                 # Cell not registered yet in graph, just run it
                 cells_to_run = [request.cell_id]
 
-            total_cells = len(cells_to_run)
 
             # Execute all affected cells in topological order
             for cell_id in cells_to_run:

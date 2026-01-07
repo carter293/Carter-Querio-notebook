@@ -1,6 +1,6 @@
 """Type definitions for kernel IPC."""
 import time
-from typing import Literal, Optional, Any
+from typing import Literal, Any
 from pydantic import BaseModel, Field
 from enum import Enum
 
