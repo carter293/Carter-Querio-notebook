@@ -15,11 +15,9 @@ interface NotebookCellProps {
   onDelete: () => void;
   isFocused: boolean;
   onFocus: () => void;
-  // Application-level keyboard shortcuts
   onFocusPreviousCell: () => void;
   onFocusNextCell: () => void;
   onToggleKeyboardShortcuts: () => void;
-  onToggleChat: () => void;
 }
 
 export function NotebookCell({ 
@@ -32,18 +30,19 @@ export function NotebookCell({
   onFocusPreviousCell,
   onFocusNextCell,
   onToggleKeyboardShortcuts,
-  onToggleChat
 }: NotebookCellProps) {
   const [localCode, setLocalCode] = useState(cell.code);
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
-  const hasUnsavedChangesRef = useRef(false);
-  
+  const [autoSaveTimer, setAutoSaveTimer] = useState<NodeJS.Timeout | null>(null);
+  const AUTO_SAVE_DELAY = 1500; // 1.5 seconds
+  const handleRunRef = useRef<(() => Promise<void>) | null>(null);
+
   // Store the latest callbacks in refs to avoid stale closures
   const callbacksRef = useRef({
     onFocusPreviousCell,
     onFocusNextCell,
     onToggleKeyboardShortcuts,
-    onToggleChat,
+    onUpdateCode,
   });
 
   // Update refs when callbacks change
@@ -52,14 +51,36 @@ export function NotebookCell({
       onFocusPreviousCell,
       onFocusNextCell,
       onToggleKeyboardShortcuts,
-      onToggleChat,
+      onUpdateCode,
     };
-  }, [onFocusPreviousCell, onFocusNextCell, onToggleKeyboardShortcuts, onToggleChat]);
+  }, [onFocusPreviousCell, onFocusNextCell, onToggleKeyboardShortcuts, onUpdateCode]);
 
+  // Auto-save after typing stops (no auto-run)
   useEffect(() => {
-    setLocalCode(cell.code);
-    hasUnsavedChangesRef.current = false;
-  }, [cell.code]);
+    // Clear existing timer
+    if (autoSaveTimer) {
+      clearTimeout(autoSaveTimer);
+    }
+
+    // Don't auto-save if code hasn't changed
+    if (localCode === cell.code) {
+      return;
+    }
+
+    // Set auto-save timer
+    const timer = setTimeout(async () => {
+      if (localCode !== cell.code) {
+        await onUpdateCode(localCode);
+        setLocalCode(cell.code);
+      }
+    }, AUTO_SAVE_DELAY);
+
+    setAutoSaveTimer(timer);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [localCode, cell.code]);
 
   // Focus the editor when this cell becomes focused
   useEffect(() => {
@@ -71,29 +92,46 @@ export function NotebookCell({
   const handleEditorChange = (value: string | undefined) => {
     if (value !== undefined) {
       setLocalCode(value);
-      // Track that we have unsaved changes
-      hasUnsavedChangesRef.current = value !== cell.code;
     }
   };
 
   const handleEditorBlur = async () => {
-    // Save when user clicks away from the cell, but only if there are changes
-    if (hasUnsavedChangesRef.current && localCode !== cell.code) {
+    // Cancel auto-save timer if active
+    if (autoSaveTimer) {
+      clearTimeout(autoSaveTimer);
+      setAutoSaveTimer(null);
+    }
+
+    // If there are unsaved changes, save AND run
+    if (localCode !== cell.code) {
       await onUpdateCode(localCode);
-      hasUnsavedChangesRef.current = false;
+
+      // Run the cell after saving
+      onRun();
     }
   };
 
   const handleRun = async () => {
-    // Save any unsaved changes before running
-    if (hasUnsavedChangesRef.current && localCode !== cell.code) {
-      await onUpdateCode(localCode);
-      hasUnsavedChangesRef.current = false;
+    // Get the current code directly from the editor to avoid stale state
+    const currentCode = editorRef.current?.getValue() ?? localCode;
+
+    // Cancel auto-save timer if active
+    if (autoSaveTimer) {
+      clearTimeout(autoSaveTimer);
+      setAutoSaveTimer(null);
     }
+
+    // Always send update to ensure kernel has latest code before running
+    await onUpdateCode(currentCode);
+
     // Then run the cell
     onRun();
   };
 
+  // Update the ref whenever handleRun changes
+  useEffect(() => {
+    handleRunRef.current = handleRun;
+  });
   const handleEditorMount = (editorInstance: editor.IStandaloneCodeEditor, monaco: Monaco) => {
     editorRef.current = editorInstance;
 
@@ -165,17 +203,6 @@ export function NotebookCell({
       ],
       run: () => {
         callbacksRef.current.onToggleKeyboardShortcuts();
-      },
-    });
-    
-    editorInstance.addAction({
-      id: `notebook-cell-toggle-chat-${cell.id}`,
-      label: 'Toggle Chat Panel',
-      keybindings: [
-        monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyB,
-      ],
-      run: () => {
-        callbacksRef.current.onToggleChat();
       },
     });
   };
@@ -270,16 +297,16 @@ export function NotebookCell({
       )}
 
       {/* Metadata */}
-      {(cell.reads.length > 0 || cell.writes.length > 0) && (
+      {((cell.reads?.length ?? 0) > 0 || (cell.writes?.length ?? 0) > 0) && (
         <div className="border-t border-border bg-card px-4 py-2 text-xs text-muted-foreground">
-          {cell.reads.length > 0 && (
+          {(cell.reads?.length ?? 0) > 0 && (
             <span className="mr-4">
-              Reads: <code className="font-mono">{cell.reads.join(", ")}</code>
+              Reads: <code className="font-mono">{cell.reads?.join(", ")}</code>
             </span>
           )}
-          {cell.writes.length > 0 && (
+          {(cell.writes?.length ?? 0) > 0 && (
             <span>
-              Writes: <code className="font-mono">{cell.writes.join(", ")}</code>
+              Writes: <code className="font-mono">{cell.writes?.join(", ")}</code>
             </span>
           )}
         </div>

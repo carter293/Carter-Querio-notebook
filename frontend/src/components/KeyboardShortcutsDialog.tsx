@@ -15,7 +15,6 @@ export function KeyboardShortcutsDialog({ open, onOpenChange }: KeyboardShortcut
     { keys: [modKey, "Shift", "↑"], description: "Focus previous cell" },
     { keys: [modKey, "Shift", "↓"], description: "Focus next cell" },
     { keys: [modKey, "K"], description: "Show keyboard shortcuts" },
-    { keys: [modKey, "B"], description: "Toggle chat panel" },
   ];
 
   return (

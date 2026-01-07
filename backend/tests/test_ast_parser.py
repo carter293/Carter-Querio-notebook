@@ -1,97 +1,79 @@
+"""Tests for AST dependency extraction."""
 import pytest
-from ast_parser import extract_dependencies, extract_sql_dependencies, substitute_sql_variables
+from app.core.ast_parser import extract_python_dependencies, extract_sql_dependencies
 
-def test_extract_simple_assignment():
-    code = "x = 5"
-    reads, writes = extract_dependencies(code)
-    assert writes == {'x'}
+
+def test_simple_assignment():
+    code = "x = 10"
+    reads, writes = extract_python_dependencies(code)
     assert reads == set()
+    assert writes == {'x'}
 
-def test_extract_dependency():
-    code = "y = x + 1"
-    reads, writes = extract_dependencies(code)
-    assert writes == {'y'}
+
+def test_read_and_write():
+    code = "y = x * 2"
+    reads, writes = extract_python_dependencies(code)
     assert reads == {'x'}
+    assert writes == {'y'}
 
-def test_extract_function_def():
-    code = "def foo(): pass"
-    reads, writes = extract_dependencies(code)
-    assert writes == {'foo'}
 
-def test_extract_import():
-    code = "import pandas as pd"
-    reads, writes = extract_dependencies(code)
-    assert writes == {'pd'}
+def test_multiple_variables():
+    code = """
+a = x + 1
+b = y + 2
+c = a + b
+"""
+    reads, writes = extract_python_dependencies(code)
+    assert reads == {'x', 'y'}  # a, b are defined in this cell, not external deps
+    assert writes == {'a', 'b', 'c'}
 
-def test_local_variable_not_read():
-    code = "x = 5\ny = x + 1"
-    reads, writes = extract_dependencies(code)
-    assert reads == set()  # x is local
-    assert writes == {'x', 'y'}
 
-def test_multiple_reads():
-    code = "z = x + y"
-    reads, writes = extract_dependencies(code)
-    assert reads == {'x', 'y'}
-    assert writes == {'z'}
+def test_function_definition():
+    code = """
+def foo(x):
+    local_var = x * 2
+    return local_var
+"""
+    reads, writes = extract_python_dependencies(code)
+    assert reads == set()
+    assert writes == {'foo'}  # Only the function name
 
-def test_from_import():
-    code = "from pandas import DataFrame"
-    reads, writes = extract_dependencies(code)
-    assert writes == {'DataFrame'}
 
-def test_from_import_as():
-    code = "from pandas import DataFrame as DF"
-    reads, writes = extract_dependencies(code)
-    assert writes == {'DF'}
+def test_import_statements():
+    code = """
+import pandas as pd
+from matplotlib import pyplot as plt
+"""
+    reads, writes = extract_python_dependencies(code)
+    assert reads == set()
+    assert writes == {'pd', 'plt'}
 
-def test_class_def():
-    code = "class MyClass: pass"
-    reads, writes = extract_dependencies(code)
+
+def test_class_definition():
+    code = """
+class MyClass:
+    def __init__(self):
+        self.value = 10
+"""
+    reads, writes = extract_python_dependencies(code)
+    assert reads == set()
     assert writes == {'MyClass'}
 
+
 def test_syntax_error():
-    code = "x = ("
-    reads, writes = extract_dependencies(code)
+    code = "x = ("  # Invalid syntax
+    reads, writes = extract_python_dependencies(code)
     assert reads == set()
     assert writes == set()
 
-def test_sql_template_extraction():
-    sql = "SELECT * FROM users WHERE id = {user_id} AND name = {user_name}"
-    deps = extract_sql_dependencies(sql)
-    assert deps == {'user_id', 'user_name'}
 
-def test_sql_template_extraction_empty():
-    sql = "SELECT * FROM users"
+def test_sql_template_extraction():
+    sql = "SELECT * FROM users WHERE id = {user_id} AND status = {status}"
+    deps = extract_sql_dependencies(sql)
+    assert deps == {'user_id', 'status'}
+
+
+def test_sql_no_templates():
+    sql = "SELECT * FROM users LIMIT 10"
     deps = extract_sql_dependencies(sql)
     assert deps == set()
-
-def test_sql_substitution_int():
-    sql = "SELECT * FROM users WHERE id = {user_id}"
-    result = substitute_sql_variables(sql, {'user_id': 42})
-    assert result == "SELECT * FROM users WHERE id = 42"
-
-def test_sql_substitution_string():
-    sql = "SELECT * FROM users WHERE name = {name}"
-    result = substitute_sql_variables(sql, {'name': "Alice"})
-    assert result == "SELECT * FROM users WHERE name = 'Alice'"
-
-def test_sql_substitution_string_with_quotes():
-    sql = "SELECT * FROM users WHERE name = {name}"
-    result = substitute_sql_variables(sql, {'name': "O'Brien"})
-    assert result == "SELECT * FROM users WHERE name = 'O''Brien'"
-
-def test_sql_substitution_none():
-    sql = "SELECT * FROM users WHERE name = {name}"
-    result = substitute_sql_variables(sql, {'name': None})
-    assert result == "SELECT * FROM users WHERE name = NULL"
-
-def test_sql_substitution_missing_variable():
-    sql = "SELECT * FROM users WHERE id = {user_id}"
-    with pytest.raises(NameError):
-        substitute_sql_variables(sql, {})
-
-def test_sql_substitution_multiple():
-    sql = "SELECT * FROM users WHERE id = {uid} AND name = {uname}"
-    result = substitute_sql_variables(sql, {'uid': 123, 'uname': 'Bob'})
-    assert result == "SELECT * FROM users WHERE id = 123 AND name = 'Bob'"

@@ -1,8 +1,0 @@
-{
-  "id": "test-notebook",
-  "user_id": "test-user",
-  "name": "Test Notebook",
-  "db_conn_string": null,
-  "revision": 1,
-  "cells": []
-}

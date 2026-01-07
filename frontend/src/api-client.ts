@@ -1,14 +1,14 @@
 // API client wrapper using generated OpenAPI client
 import {
-  listNotebooksEndpointApiNotebooksGet,
-  createNotebookApiNotebooksPost,
-  getNotebookApiNotebooksNotebookIdGet,
-  updateDbConnectionApiNotebooksNotebookIdDbPut,
-  renameNotebookApiNotebooksNotebookIdNamePut,
-  deleteNotebookEndpointApiNotebooksNotebookIdDelete,
-  createCellApiNotebooksNotebookIdCellsPost,
-  updateCellApiNotebooksNotebookIdCellsCellIdPut,
-  deleteCellApiNotebooksNotebookIdCellsCellIdDelete,
+  listNotebooksEndpointApiV1NotebooksGet,
+  createNotebookApiV1NotebooksPost,
+  getNotebookApiV1NotebooksNotebookIdGet,
+  updateDbConnectionApiV1NotebooksNotebookIdDbPut,
+  renameNotebookApiV1NotebooksNotebookIdNamePut,
+  deleteNotebookEndpointApiV1NotebooksNotebookIdDelete,
+  createCellApiV1NotebooksNotebookIdCellsPost,
+  updateCellApiV1NotebooksNotebookIdCellsCellIdPut,
+  deleteCellApiV1NotebooksNotebookIdCellsCellIdDelete,
 } from './client';
 import { client } from './client/client.gen';
 
@@ -23,93 +23,8 @@ client.setConfig({
   baseUrl: API_BASE_URL,
 });
 
-// ============================================================================
-// Authentication Interceptor Setup
-// ============================================================================
-
-// Track interceptor ID to prevent duplicate registration in React Strict Mode
-let requestInterceptorId: number | null = null;
-let responseInterceptorId: number | null = null;
-
-/**
- * Setup authentication interceptor that automatically injects Clerk token
- * into every request. Safe to call multiple times (idempotent).
- * 
- * @param getToken - Clerk's getToken function from useAuth()
- * @returns Cleanup function to remove interceptors
- */
-export function setupAuthInterceptor(getToken: () => Promise<string | null>): () => void {
-  // Prevent duplicate registration in React Strict Mode
-  if (requestInterceptorId !== null) {
-    console.warn('Auth interceptor already registered, skipping duplicate setup');
-    return () => {}; // Return no-op cleanup
-  }
-
-  // Register request interceptor - injects token into Authorization header
-  requestInterceptorId = client.interceptors.request.use(async (request, _options) => {
-    try {
-      // Call getToken() on EVERY request - Clerk caches and auto-refreshes
-      const token = await getToken();
-      
-      if (token) {
-        request.headers.set('Authorization', `Bearer ${token}`);
-      } else {
-        // Token not available yet (Clerk still loading or user not authenticated)
-        console.warn('No auth token available for request:', request.url);
-      }
-    } catch (error) {
-      console.error('Failed to get auth token:', error);
-      // Continue with request even if token fetch fails - backend will return 401
-    }
-    
-    return request;
-  });
-
-  // Register response interceptor - handle 401 with retry
-  responseInterceptorId = client.interceptors.response.use(async (response, request, _options) => {
-    // If 401, token may have expired - try once more with fresh token
-    if (response.status === 401) {
-      console.warn('Request failed with 401, attempting retry with fresh token');
-      
-      try {
-        const token = await getToken();
-        
-        if (token) {
-          // Clone request with new token
-          const newRequest = request.clone();
-          newRequest.headers.set('Authorization', `Bearer ${token}`);
-          
-          // Retry request with fresh token
-          const retryResponse = await fetch(newRequest);
-          return retryResponse;
-        } else {
-          console.error('No token available for retry, user may need to re-authenticate');
-        }
-      } catch (error) {
-        console.error('Failed to retry request with fresh token:', error);
-      }
-    }
-    
-    return response;
-  });
-
-  // Return cleanup function
-  return () => {
-    if (requestInterceptorId !== null) {
-      client.interceptors.request.eject(requestInterceptorId);
-      requestInterceptorId = null;
-    }
-    if (responseInterceptorId !== null) {
-      client.interceptors.response.eject(responseInterceptorId);
-      responseInterceptorId = null;
-    }
-  };
-}
-
 // Import and re-export types from generated client
 import type {
-  CellType,
-  CellStatus,
   CellResponse,
   NotebookResponse,
   ListNotebooksResponse,
@@ -117,8 +32,11 @@ import type {
   OutputResponse,
 } from './client';
 
+// Define types from inline unions
+export type CellType = 'python' | 'sql';
+export type CellStatus = 'idle' | 'running' | 'success' | 'error' | 'blocked';
+
 // Re-export with convenient aliases
-export type { CellType, CellStatus };
 export type Cell = CellResponse;
 export type Notebook = NotebookResponse;
 export type NotebookMetadata = NotebookMetadataResponse;
@@ -150,7 +68,7 @@ async function handleApiError(response: Response, operation: string): Promise<vo
 
 // Notebook operations
 export async function createNotebook(): Promise<{ notebook_id: string }> {
-  const result = await createNotebookApiNotebooksPost();
+  const result = await createNotebookApiV1NotebooksPost();
   
   if (!result.response.ok) {
     await handleApiError(result.response, 'create notebook');
@@ -160,7 +78,7 @@ export async function createNotebook(): Promise<{ notebook_id: string }> {
 }
 
 export async function getNotebook(id: string): Promise<Notebook> {
-  const result = await getNotebookApiNotebooksNotebookIdGet({
+  const result = await getNotebookApiV1NotebooksNotebookIdGet({
     path: { notebook_id: id },
   });
   
@@ -172,7 +90,7 @@ export async function getNotebook(id: string): Promise<Notebook> {
 }
 
 export async function listNotebooks(): Promise<NotebookMetadataResponse[]> {
-  const result = await listNotebooksEndpointApiNotebooksGet();
+  const result = await listNotebooksEndpointApiV1NotebooksGet();
   
   if (!result.response.ok) {
     await handleApiError(result.response, 'list notebooks');
@@ -184,7 +102,7 @@ export async function listNotebooks(): Promise<NotebookMetadataResponse[]> {
 }
 
 export async function updateDbConnection(id: string, connString: string): Promise<void> {
-  const result = await updateDbConnectionApiNotebooksNotebookIdDbPut({
+  const result = await updateDbConnectionApiV1NotebooksNotebookIdDbPut({
     path: { notebook_id: id },
     body: { connection_string: connString },
   });
@@ -195,7 +113,7 @@ export async function updateDbConnection(id: string, connString: string): Promis
 }
 
 export async function renameNotebook(notebookId: string, name: string): Promise<void> {
-  const result = await renameNotebookApiNotebooksNotebookIdNamePut({
+  const result = await renameNotebookApiV1NotebooksNotebookIdNamePut({
     path: { notebook_id: notebookId },
     body: { name },
   });
@@ -206,7 +124,7 @@ export async function renameNotebook(notebookId: string, name: string): Promise<
 }
 
 export async function deleteNotebook(notebookId: string): Promise<void> {
-  const result = await deleteNotebookEndpointApiNotebooksNotebookIdDelete({
+  const result = await deleteNotebookEndpointApiV1NotebooksNotebookIdDelete({
     path: { notebook_id: notebookId },
   });
   
@@ -221,7 +139,7 @@ export async function createCell(
   type: 'python' | 'sql', 
   afterCellId?: string
 ): Promise<{ cell_id: string }> {
-  const result = await createCellApiNotebooksNotebookIdCellsPost({
+  const result = await createCellApiV1NotebooksNotebookIdCellsPost({
     path: { notebook_id: notebookId },
     body: { 
       type,
@@ -237,7 +155,7 @@ export async function createCell(
 }
 
 export async function updateCell(notebookId: string, cellId: string, code: string): Promise<void> {
-  const result = await updateCellApiNotebooksNotebookIdCellsCellIdPut({
+  const result = await updateCellApiV1NotebooksNotebookIdCellsCellIdPut({
     path: {
       notebook_id: notebookId,
       cell_id: cellId,
@@ -251,7 +169,7 @@ export async function updateCell(notebookId: string, cellId: string, code: strin
 }
 
 export async function deleteCell(notebookId: string, cellId: string): Promise<void> {
-  const result = await deleteCellApiNotebooksNotebookIdCellsCellIdDelete({
+  const result = await deleteCellApiV1NotebooksNotebookIdCellsCellIdDelete({
     path: {
       notebook_id: notebookId,
       cell_id: cellId,

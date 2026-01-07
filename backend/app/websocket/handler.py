@@ -1,0 +1,95 @@
+from fastapi import WebSocket, WebSocketDisconnect
+from typing import Dict
+from ..orchestration.coordinator import NotebookCoordinator
+
+
+class ConnectionManager:
+    """Manage active WebSocket connections."""
+
+    def __init__(self):
+        self.active_connections: Dict[str, WebSocket] = {}
+        self.coordinators: Dict[str, NotebookCoordinator] = {}
+
+    async def connect(self, websocket: WebSocket, connection_id: str, notebook_id: str):
+        await websocket.accept()
+        self.active_connections[connection_id] = websocket
+
+        # Create coordinator for this connection
+        coordinator = NotebookCoordinator(broadcaster=self)
+        await coordinator.load_notebook(notebook_id)
+        self.coordinators[connection_id] = coordinator
+
+    def disconnect(self, connection_id: str):
+        if connection_id in self.active_connections:
+            del self.active_connections[connection_id]
+        if connection_id in self.coordinators:
+            # Stop kernel process before removing coordinator
+            coordinator = self.coordinators[connection_id]
+            coordinator.shutdown()
+            del self.coordinators[connection_id]
+
+    async def send_message(self, connection_id: str, message: dict):
+        if connection_id in self.active_connections:
+            websocket = self.active_connections[connection_id]
+            await websocket.send_json(message)
+
+    async def broadcast(self, message: dict):
+        """Send message to all connected clients."""
+        for websocket in self.active_connections.values():
+            await websocket.send_json(message)
+
+
+manager = ConnectionManager()
+
+
+async def handle_websocket(websocket: WebSocket, connection_id: str, notebook_id: str):
+    """Handle WebSocket connection lifecycle."""
+    await manager.connect(websocket, connection_id, notebook_id)
+    coordinator = manager.coordinators[connection_id]
+
+    try:
+        # Message loop
+        while True:
+            message = await websocket.receive_json()
+            await handle_message(connection_id, coordinator, message)
+
+    except WebSocketDisconnect:
+        manager.disconnect(connection_id)
+    except Exception as e:
+        print(f"WebSocket error: {e}")
+        manager.disconnect(connection_id)
+
+
+async def handle_message(connection_id: str, coordinator: NotebookCoordinator, message: dict):
+    """Handle incoming WebSocket messages."""
+    msg_type = message.get("type")
+
+    if msg_type == "cell_update":
+        cell_id = message.get("cellId")
+        new_code = message.get("code")
+        if cell_id and new_code is not None:
+            await coordinator.handle_cell_update(cell_id, new_code)
+
+    elif msg_type == "update_db_connection":
+        connection_string = message.get("connectionString")
+        if connection_string is not None:
+            await coordinator.handle_db_connection_update(connection_string)
+
+    elif msg_type == "run_cell":
+        cell_id = message.get("cellId")
+        if cell_id:
+            await coordinator.handle_run_cell(cell_id)
+
+    elif msg_type == "create_cell":
+        cell_type = message.get("cellType")
+        after_cell_id = message.get("afterCellId")
+        if cell_type:
+            await coordinator.handle_create_cell(cell_type, after_cell_id)
+
+    elif msg_type == "delete_cell":
+        cell_id = message.get("cellId")
+        if cell_id:
+            await coordinator.handle_delete_cell(cell_id)
+
+    else:
+        print(f"Unknown message type: {msg_type}")
