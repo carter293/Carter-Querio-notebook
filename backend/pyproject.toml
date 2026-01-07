@@ -12,6 +12,9 @@ dependencies = [
     "asyncpg>=0.29.0",
     "httpx>=0.28.1",
     "networkx>=3.6.1",
+    "plotly>=6.5.0",
+    "pandas>=2.3.3",
+    "matplotlib>=3.10.8",
 ]
 
 [project.optional-dependencies]

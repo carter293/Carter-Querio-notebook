@@ -1,7 +1,6 @@
 # Notebook: Test Plotly
 
 # %% python [c1]
-
 import plotly.graph_objects as go
 
 fig = go.Figure(data=[

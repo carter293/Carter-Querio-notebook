@@ -56,21 +56,25 @@ async def test_sql_basic_query():
 
 @pytest.mark.asyncio
 async def test_sql_template_substitution():
-    """Test {variable} template substitution with parameterized queries."""
+    """Test {variable} template substitution with parameterized queries.
+
+    Uses explicit type casts (::INTEGER) because SELECT $1 has no type context.
+    In real queries (WHERE, JOIN, etc.), PostgreSQL infers types from column context.
+    """
     executor = SQLExecutor()
     executor.set_connection_string(DB_CONNECTION_STRING)
 
     variables = {'user_id': 42, 'min_age': 18}
 
     result = await executor.execute(
-        "SELECT {user_id} as id, {min_age} as min_age",
+        "SELECT {user_id}::INTEGER as id, {min_age}::INTEGER as min_age",
         variables
     )
 
     assert result.status == 'success'
     data = result.outputs[0].data
-    # Parameters are converted to strings for PostgreSQL type compatibility
-    assert data['rows'] == [['42', '18']]
+    # Parameters preserve Python types (int→integer with explicit cast)
+    assert data['rows'] == [[42, 18]]
 
 
 @pytest.mark.asyncio

@@ -196,7 +196,7 @@ class SQLExecutor:
             variables: Dictionary mapping variable names to values
 
         Returns:
-            Tuple of (parameterized_sql, parameter_values as strings)
+            Tuple of (parameterized_sql, parameter_values)
 
         Raises:
             ValueError: If a template variable is not found in variables dict
@@ -206,18 +206,16 @@ class SQLExecutor:
             variables = {'user_id': 42, 'min_age': 18}
 
             Returns:
-                ("SELECT $1 as id, $2 as min_age", ['42', '18'])
-                
+                ("SELECT $1 as id, $2 as min_age", [42, 18])
+
         Note:
-            All parameters are converted to strings. PostgreSQL will automatically
-            convert them to the appropriate type based on the SQL context (e.g.,
-            in comparisons, function arguments, etc.). This avoids type inference
-            issues with queries like "SELECT $1" where PostgreSQL has no context
-            to determine the parameter type.
+            Python types are preserved and passed to asyncpg for automatic type
+            conversion (int→integer, str→text, etc.). This ensures proper type
+            inference for parameterized queries.
         """
         import re
 
-        params: list[str] = []
+        params: list[Any] = []
         param_counter = 1
 
         def replace_var(match: re.Match) -> str:
@@ -228,8 +226,8 @@ class SQLExecutor:
                 raise ValueError(f"Variable '{var_name}' not found in namespace")
 
             value = variables[var_name]
-            # Convert to string, handle None as NULL
-            params.append(str(value) if value is not None else None)
+            # Preserve Python types for proper asyncpg type conversion
+            params.append(value)
             
             placeholder = f"${param_counter}"
             param_counter += 1
@@ -281,8 +279,11 @@ class SQLExecutor:
 
                     def serialize_value(val):
                         """Convert non-JSON-serializable types to strings."""
+                        from decimal import Decimal
                         if isinstance(val, (datetime, date, time)):
                             return val.isoformat()
+                        if isinstance(val, Decimal):
+                            return float(val)
                         return val
 
                     columns = list(records[0].keys())

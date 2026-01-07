@@ -35,7 +35,6 @@ export function NotebookCell({
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const [autoSaveTimer, setAutoSaveTimer] = useState<NodeJS.Timeout | null>(null);
   const AUTO_SAVE_DELAY = 1500; // 1.5 seconds
-  const handleRunRef = useRef<(() => Promise<void>) | null>(null);
 
   // Store the latest callbacks in refs to avoid stale closures
   const callbacksRef = useRef({
@@ -71,7 +70,6 @@ export function NotebookCell({
     const timer = setTimeout(async () => {
       if (localCode !== cell.code) {
         await onUpdateCode(localCode);
-        setLocalCode(cell.code);
       }
     }, AUTO_SAVE_DELAY);
 
@@ -128,10 +126,6 @@ export function NotebookCell({
     onRun();
   };
 
-  // Update the ref whenever handleRun changes
-  useEffect(() => {
-    handleRunRef.current = handleRun;
-  });
   const handleEditorMount = (editorInstance: editor.IStandaloneCodeEditor, monaco: Monaco) => {
     editorRef.current = editorInstance;
 

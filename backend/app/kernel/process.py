@@ -162,6 +162,13 @@ def kernel_main(input_queue: Queue, output_queue: Queue):
 
             # Verify cell is registered
             if request.cell_id not in cell_registry:
+                # Check if cell exists in graph but failed registration (blocked due to cycle)
+                # If so, silently skip to avoid duplicate error messages
+                if graph._graph.has_node(request.cell_id):
+                    # Cell is in graph but blocked - error already sent during registration
+                    continue
+
+                # Cell doesn't exist at all - this is unexpected, send error
                 error_msg = (
                     f"Cell {request.cell_id} not registered. "
                     "Cells must be registered via RegisterCellRequest before execution."

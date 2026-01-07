@@ -75,6 +75,7 @@ export function NotebookApp() {
   useEffect(() => {
     // Load notebook cells when notebookId changes
     if (notebookId) {
+      setCells([])
       api.getNotebook(notebookId).then(notebook => {
         setCells(notebook.cells || []);
         setDbConnection(notebook.db_conn_string || "");
@@ -95,7 +96,12 @@ export function NotebookApp() {
         setCells((prev) =>
           prev.map((c) =>
             c.id === msg.cellId
-              ? { ...c, code: msg.cell.code, reads: msg.cell.reads, writes: msg.cell.writes }
+              ? {
+                  ...c,
+                  ...(typeof msg.cell.code !== "undefined" ? { code: msg.cell.code } : {}),
+                  reads: msg.cell.reads,
+                  writes: msg.cell.writes
+                }
               : c
           )
         );
@@ -137,6 +143,10 @@ export function NotebookApp() {
               // Clear outputs and stdout when execution starts
               return { ...c, status: msg.status, outputs: [], stdout: "", error: undefined };
             }
+            if (msg.status === 'idle' && (c.status === 'blocked' || c.status === 'error')) {
+              // Clear outputs when transitioning from blocked/error to idle
+              return { ...c, status: msg.status, outputs: [], stdout: "", error: undefined };
+            }
             return { ...c, status: msg.status };
           })
         );
@@ -164,10 +174,8 @@ export function NotebookApp() {
               ? {
                   ...c,
                   status: "error" as CellStatus,
-                  outputs: [
-                    ...(c.outputs || []),
-                    { mime_type: "text/plain", data: msg.error },
-                  ],
+                  // Replace outputs with just the error (don't append duplicates)
+                  outputs: [{ mime_type: "text/plain", data: msg.error }],
                 }
               : c
           )
@@ -524,6 +532,7 @@ export function NotebookApp() {
                 el && cellRefs.current.set(cell.id, el);
               }}>
                 <NotebookCell
+                  key={`${notebookId}-${cell.id}`}
                   cell={cell}
                   onUpdateCode={(code) => updateCellCode(cell.id, code)}
                   onRun={() => runCell(cell.id)}

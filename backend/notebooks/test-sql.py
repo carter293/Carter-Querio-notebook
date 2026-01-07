@@ -8,5 +8,7 @@ user_id = 42
 
 
 
+
+
 # %% sql [c2]
-SELECT * FROM users
+SELECT * FROM users where id = {user_id}
