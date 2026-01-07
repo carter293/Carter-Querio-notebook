@@ -410,14 +410,14 @@ def test_sql_no_templates():
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] All AST parser tests pass: `pytest backend/tests/test_ast_parser.py -v`
-- [ ] Type checking passes: `mypy backend/app/kernel/types.py backend/app/kernel/ast_parser.py`
-- [ ] No import errors: `python -c "from app.kernel.ast_parser import extract_dependencies"`
+- [x] All AST parser tests pass: `pytest backend/tests/test_ast_parser.py -v`
+- [x] Type checking passes: `mypy backend/app/kernel/types.py backend/app/kernel/ast_parser.py`
+- [x] No import errors: `python -c "from app.kernel.ast_parser import extract_dependencies"`
 
 #### Manual Verification:
-- [ ] Parser correctly identifies reads/writes for complex code
-- [ ] Parser handles syntax errors gracefully (returns empty sets)
-- [ ] SQL template extraction works for `{variable}` syntax
+- [x] Parser correctly identifies reads/writes for complex code
+- [x] Parser handles syntax errors gracefully (returns empty sets)
+- [x] SQL template extraction works for `{variable}` syntax
 
 ---
 
@@ -672,15 +672,15 @@ def test_get_dependents():
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] All graph tests pass: `pytest backend/tests/test_graph.py -v`
-- [ ] Cycle detection works for simple and complex cases
-- [ ] Topological sort produces correct execution order
-- [ ] Type checking passes: `mypy backend/app/kernel/graph.py`
+- [x] All graph tests pass: `pytest backend/tests/test_graph.py -v`
+- [x] Cycle detection works for simple and complex cases
+- [x] Topological sort produces correct execution order
+- [x] Type checking passes: `mypy backend/app/kernel/graph.py`
 
 #### Manual Verification:
-- [ ] Diamond dependency pattern resolves correctly
-- [ ] Variable shadowing handled properly
-- [ ] Cycle error messages are clear and helpful
+- [x] Diamond dependency pattern resolves correctly
+- [x] Variable shadowing handled properly
+- [x] Cycle error messages are clear and helpful
 
 ---
 
@@ -995,16 +995,16 @@ def test_mime_plain_text():
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] All executor tests pass: `pytest backend/tests/test_executor.py -v`
-- [ ] Variable persistence works across executions
-- [ ] Syntax and runtime errors are captured with tracebacks
-- [ ] MIME conversion works for available libraries
+- [x] All executor tests pass: `pytest backend/tests/test_executor.py -v`
+- [x] Variable persistence works across executions
+- [x] Syntax and runtime errors are captured with tracebacks
+- [x] MIME conversion works for available libraries
 
 #### Manual Verification:
-- [ ] Print statements appear in stdout
-- [ ] Final expressions are captured as outputs
-- [ ] Errors show helpful tracebacks with line numbers
-- [ ] DataFrames render as tables (when pandas installed)
+- [x] Print statements appear in stdout
+- [x] Final expressions are captured as outputs
+- [x] Errors show helpful tracebacks with line numbers
+- [x] DataFrames render as tables (when pandas installed)
 
 ---
 
@@ -1252,15 +1252,15 @@ async def test_cycle_detection(kernel):
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Integration tests pass: `pytest backend/tests/test_kernel_integration.py -v`
-- [ ] Kernel process starts and stops cleanly
-- [ ] Variables persist across multiple executions
-- [ ] Cycle detection works end-to-end
+- [x] Integration tests pass: `pytest backend/tests/test_kernel_integration.py -v`
+- [x] Kernel process starts and stops cleanly
+- [x] Variables persist across multiple executions
+- [x] Cycle detection works end-to-end
 
 #### Manual Verification:
-- [ ] Kernel process appears in `ps` output when running
-- [ ] Kernel survives syntax errors (process doesn't crash)
-- [ ] Can restart kernel and start fresh
+- [x] Kernel process appears in `ps` output when running
+- [x] Kernel survives syntax errors (process doesn't crash)
+- [x] Can restart kernel and start fresh
 
 ---
 
@@ -1425,15 +1425,15 @@ async def test_reactive_cascade_chain(kernel):
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Reactive cascade tests pass (once execute() returns multiple results)
-- [ ] Changing A causes B and C to re-run automatically
-- [ ] Cells execute in correct topological order
+- [x] Reactive cascade tests pass (once execute() returns multiple results)
+- [x] Changing A causes B and C to re-run automatically
+- [x] Cells execute in correct topological order
 
 #### Manual Verification:
-- [ ] Create 3 cells: A (x=1), B (y=x*2), C (print(y))
-- [ ] Run all cells in order
-- [ ] Change A to x=10
-- [ ] Verify C prints "20" (confirming cascade happened)
+- [x] Create 3 cells: A (x=1), B (y=x*2), C (print(y))
+- [x] Run all cells in order
+- [x] Change A to x=10
+- [x] Verify C prints "20" (confirming cascade happened)
 
 ---
 

@@ -1,61 +1,187 @@
 """Coordinates notebook execution and WebSocket broadcasting."""
-from typing import Set, Optional
-from ..core.ast_parser import extract_python_dependencies, extract_sql_dependencies
-from ..core.graph import DependencyGraph, CycleDetectedError
-from ..core.executor import PythonExecutor, SQLExecutor
+import asyncio
+import queue
+from typing import Optional, List
 from ..file_storage import NotebookFileStorage
-from ..models import NotebookResponse, CellResponse
+from ..models import NotebookResponse
+from ..kernel.manager import KernelManager
+from ..kernel.types import (
+    ExecuteRequest,
+    ExecutionResult,
+    RegisterCellRequest,
+    RegisterCellResult,
+    SetDatabaseConfigRequest,
+    SetDatabaseConfigResult,
+)
 
 
 class NotebookCoordinator:
     """
     Coordinates notebook operations:
-    - Manages dependency graph
-    - Executes cells reactively
+    - Manages kernel lifecycle
     - Broadcasts updates via WebSocket
     """
 
     def __init__(self, broadcaster):
-        self.graph = DependencyGraph()
-        self.python_executor = PythonExecutor()
-        self.sql_executor = SQLExecutor()
+        # Use kernel instead of in-process execution
+        self.kernel = KernelManager()
+        self.kernel.start()
+
         self.broadcaster = broadcaster
         self.notebook_id: Optional[str] = None
         self.notebook: Optional[NotebookResponse] = None
 
-    def load_notebook(self, notebook_id: str):
-        """Load a notebook and rebuild the dependency graph."""
+        # Background task flag and task handle
+        self._running = True
+        self._output_task: Optional[asyncio.Task] = None
+
+    async def _start_background_task(self):
+        """Start background output processing task."""
+        self._output_task = asyncio.create_task(self._process_output_queue())
+
+    async def _process_output_queue(self):
+        """
+        Background task that continuously processes ALL kernel outputs.
+        This is the ONLY place that reads from output_queue.
+
+        The coordinator is STATELESS for execution results - it just routes
+        messages from kernel to clients. All execution state (status, outputs,
+        errors) lives only in the frontend.
+        """
+        loop = asyncio.get_event_loop()
+
+        while self._running:
+            try:
+                # Read from output queue with timeout (1 second)
+                msg = await loop.run_in_executor(
+                    None,
+                    lambda: self.kernel.output_queue.get(timeout=1)
+                )
+
+                # All messages are CellNotification
+                from ..kernel.types import CellNotification
+                notification = CellNotification(**msg)
+
+                # Just broadcast - don't update state!
+                # Clients maintain their own execution state from the stream
+                await self._broadcast_notification(notification)
+
+            except queue.Empty:
+                # Check if kernel is alive
+                if not self.kernel.process.is_alive():
+                    print("[Coordinator] Kernel died!")
+                    await self._handle_kernel_death()
+                    break
+                continue
+            except Exception as e:
+                print(f"[Coordinator] Error processing output: {e}")
+                import traceback
+                traceback.print_exc()
+                continue
+
+    async def _broadcast_notification(self, notification):
+        """Broadcast notification to WebSocket clients."""
+        from ..kernel.types import CellChannel
+
+        channel = notification.output.channel
+        cell_id = notification.cell_id
+        data = notification.output.data
+
+        # Handle system messages
+        if cell_id == "__system__":
+            if channel == CellChannel.STATUS and data.get("status") == "db_configured":
+                await self.broadcaster.broadcast({
+                    'type': 'db_connection_updated',
+                    'connectionString': self.notebook.db_conn_string if self.notebook else '',
+                    'status': 'success'
+                })
+            elif channel == CellChannel.ERROR:
+                await self.broadcaster.broadcast({
+                    'type': 'db_connection_updated',
+                    'connectionString': self.notebook.db_conn_string if self.notebook else '',
+                    'status': 'error',
+                    'error': data.get("message")
+                })
+            return
+
+        # Broadcast cell-specific messages
+        if channel == CellChannel.STATUS:
+            await self.broadcaster.broadcast({
+                'type': 'cell_status',
+                'cellId': cell_id,
+                'status': data.get("status")
+            })
+        elif channel == CellChannel.STDOUT:
+            await self.broadcaster.broadcast({
+                'type': 'cell_stdout',
+                'cellId': cell_id,
+                'data': data
+            })
+        elif channel == CellChannel.OUTPUT:
+            await self.broadcaster.broadcast({
+                'type': 'cell_output',
+                'cellId': cell_id,
+                'output': {
+                    'mime_type': notification.output.mimetype,
+                    'data': data
+                }
+            })
+        elif channel == CellChannel.ERROR:
+            await self.broadcaster.broadcast({
+                'type': 'cell_error',
+                'cellId': cell_id,
+                'error': data.get("message")
+            })
+        elif channel == CellChannel.METADATA:
+            await self.broadcaster.broadcast({
+                'type': 'cell_updated',
+                'cellId': cell_id,
+                'cell': {
+                    'reads': data.get("reads", []),
+                    'writes': data.get("writes", [])
+                }
+            })
+
+    async def _handle_kernel_death(self):
+        """Handle kernel process death."""
+        self._running = False
+
+        # Broadcast error to all clients
+        await self.broadcaster.broadcast({
+            'type': 'kernel_error',
+            'error': 'Kernel process died. Please reconnect.'
+        })
+
+    async def load_notebook(self, notebook_id: str):
+        """Load a notebook and send all cells to kernel for graph building."""
         self.notebook_id = notebook_id
         self.notebook = NotebookFileStorage.parse_notebook(notebook_id)
 
         if not self.notebook:
             raise ValueError(f"Notebook {notebook_id} not found")
 
-        # Rebuild graph from all cells
-        for cell in self.notebook.cells:
-            reads, writes = self._extract_dependencies(cell)
-            try:
-                self.graph.update_cell(cell.id, reads, writes)
-                # Update cell metadata
-                cell.reads = list(reads)
-                cell.writes = list(writes)
-            except CycleDetectedError:
-                # Mark cell as blocked
-                cell.status = 'blocked'
-                cell.error = 'Circular dependency detected'
+        # Start background task BEFORE registering cells
+        await self._start_background_task()
 
-    def _extract_dependencies(self, cell: CellResponse) -> tuple[Set[str], Set[str]]:
-        """Extract reads and writes from a cell."""
-        if cell.type == 'python':
-            reads, writes = extract_python_dependencies(cell.code)
-            return reads, writes
-        elif cell.type == 'sql':
-            reads = extract_sql_dependencies(cell.code)
-            return reads, set()  # SQL doesn't write variables
-        return set(), set()
+        # Register all cells with the kernel to build dependency graph
+        for cell in self.notebook.cells:
+            register_req = RegisterCellRequest(
+                cell_id=cell.id,
+                code=cell.code,
+                cell_type=cell.type
+            )
+            self.kernel.input_queue.put(register_req.model_dump())
+            # Do NOT wait for response - background task handles it
+
+        # Wait a bit for registration to complete
+        await asyncio.sleep(0.5)
+
+        # Configure database if connection string exists
+        if self.notebook.db_conn_string:
+            await self._configure_database(self.notebook.db_conn_string)
 
     async def handle_cell_update(self, cell_id: str, new_code: str):
-        """Handle a cell code update."""
+        """Handle a cell code update - returns immediately."""
         if not self.notebook:
             return
 
@@ -64,119 +190,137 @@ class NotebookCoordinator:
         if not cell:
             return
 
-        # Update code
+        # Optimistic update
         cell.code = new_code
+        NotebookFileStorage.serialize_notebook(self.notebook)
 
-        # Extract dependencies
-        reads, writes = self._extract_dependencies(cell)
-        cell.reads = list(reads)
-        cell.writes = list(writes)
+        # Send to kernel
+        register_req = RegisterCellRequest(
+            cell_id=cell_id,
+            code=cell.code,
+            cell_type=cell.type
+        )
+        self.kernel.input_queue.put(register_req.model_dump())
 
-        # Update graph
-        try:
-            self.graph.update_cell(cell_id, reads, writes)
+        # Return immediately - background task handles responses
 
-            # Broadcast updated cell metadata
-            await self.broadcaster.broadcast({
-                'type': 'cell_updated',
-                'cellId': cell_id,
-                'cell': {
-                    'code': cell.code,
-                    'reads': cell.reads,
-                    'writes': cell.writes
-                }
-            })
-        except CycleDetectedError as e:
-            # Mark cell as blocked
-            cell.status = 'blocked'
-            cell.error = str(e)
-
-            await self.broadcaster.broadcast({
-                'type': 'cell_status',
-                'cellId': cell_id,
-                'status': 'blocked'
-            })
-            await self.broadcaster.broadcast({
-                'type': 'cell_error',
-                'cellId': cell_id,
-                'error': str(e)
-            })
-
-    async def handle_run_cell(self, cell_id: str):
-        """Execute a cell and all dependent cells."""
+    async def handle_db_connection_update(self, connection_string: str):
+        """Handle database connection string update - returns immediately."""
         if not self.notebook:
             return
 
-        # Get execution order (cell + descendants)
-        execution_order = self.graph.get_execution_order(cell_id)
+        # Optimistic update
+        self.notebook.db_conn_string = connection_string
+        NotebookFileStorage.serialize_notebook(self.notebook)
 
-        # Execute cells in order
-        for cid in execution_order:
-            await self._execute_cell(cid)
+        # Send to kernel
+        await self._configure_database(connection_string)
 
-    async def _execute_cell(self, cell_id: str):
-        """Execute a single cell."""
+        # Return immediately - background task broadcasts result
+
+    async def handle_run_cell(self, cell_id: str):
+        """Execute a cell - returns immediately."""
+        if not self.notebook:
+            return
+
+        # Find cell
         cell = next((c for c in self.notebook.cells if c.id == cell_id), None)
         if not cell:
             return
 
-        # Skip blocked cells
-        if cell.status == 'blocked':
+        # Send to kernel
+        request = ExecuteRequest(
+            cell_id=cell_id,
+            code=cell.code,
+            cell_type=cell.type
+        )
+        self.kernel.input_queue.put(request.model_dump())
+
+        # Return immediately - background task handles responses
+
+    async def _configure_database(self, connection_string: str) -> None:
+        """
+        Send database connection string to kernel - returns immediately.
+        Success/error will be broadcast via background task.
+        """
+        request = SetDatabaseConfigRequest(connection_string=connection_string)
+        self.kernel.input_queue.put(request.model_dump())
+        # Return immediately
+
+    async def handle_create_cell(self, cell_type: str, after_cell_id: str = None):
+        """Handle cell creation - returns immediately."""
+        from uuid import uuid4
+        from ..models import CellResponse
+
+        if not self.notebook:
             return
 
-        # Broadcast running status
-        cell.status = 'running'
-        cell.outputs = []
-        cell.stdout = ''
-        cell.error = None
+        # Create new cell
+        cell_id = str(uuid4())
+        new_cell = CellResponse(
+            id=cell_id,
+            type=cell_type,
+            code="",
+            status="idle",
+        )
 
-        await self.broadcaster.broadcast({
-            'type': 'cell_status',
-            'cellId': cell_id,
-            'status': 'running'
-        })
+        # Insert cell at the correct position
+        if after_cell_id:
+            insert_index = None
+            for i, cell in enumerate(self.notebook.cells):
+                if cell.id == after_cell_id:
+                    insert_index = i + 1
+                    break
 
-        # Execute based on type
-        if cell.type == 'python':
-            result = self.python_executor.execute(cell.code)
-        elif cell.type == 'sql':
-            result = self.sql_executor.execute(cell.code, self.python_executor.globals_dict)
+            if insert_index is not None:
+                self.notebook.cells.insert(insert_index, new_cell)
+                index = insert_index
+            else:
+                # after_cell_id not found, append to end
+                self.notebook.cells.append(new_cell)
+                index = len(self.notebook.cells) - 1
         else:
-            return
+            # Append to end
+            self.notebook.cells.append(new_cell)
+            index = len(self.notebook.cells) - 1
 
-        # Update cell with results
-        cell.status = result.status
-        cell.stdout = result.stdout
-        cell.error = result.error
+        # Save to file
+        NotebookFileStorage.serialize_notebook(self.notebook)
 
-        # Broadcast stdout
-        if result.stdout:
-            await self.broadcaster.broadcast({
-                'type': 'cell_stdout',
-                'cellId': cell_id,
-                'data': result.stdout
-            })
-
-        # Broadcast outputs
-        for output in result.outputs:
-            cell.outputs.append(output)
-            await self.broadcaster.broadcast({
-                'type': 'cell_output',
-                'cellId': cell_id,
-                'output': output.model_dump()
-            })
-
-        # Broadcast final status
+        # Broadcast cell creation
         await self.broadcaster.broadcast({
-            'type': 'cell_status',
+            'type': 'cell_created',
             'cellId': cell_id,
-            'status': cell.status
+            'cell': new_cell.model_dump(),
+            'index': index
         })
 
-        # If error, broadcast it
-        if result.error:
-            await self.broadcaster.broadcast({
-                'type': 'cell_error',
-                'cellId': cell_id,
-                'error': result.error
-            })
+    async def handle_delete_cell(self, cell_id: str):
+        """Handle cell deletion - returns immediately."""
+        if not self.notebook:
+            return
+
+        # Find and remove cell
+        for i, cell in enumerate(self.notebook.cells):
+            if cell.id == cell_id:
+                self.notebook.cells.pop(i)
+                NotebookFileStorage.serialize_notebook(self.notebook)
+
+                # Broadcast cell deletion
+                await self.broadcaster.broadcast({
+                    'type': 'cell_deleted',
+                    'cellId': cell_id
+                })
+                return
+
+    def shutdown(self):
+        """Stop the background task and kernel process."""
+        self._running = False
+
+        # Wait for background task to finish
+        if self._output_task and not self._output_task.done():
+            self._output_task.cancel()
+
+        # Stop kernel
+        if self.kernel:
+            self.kernel.stop()

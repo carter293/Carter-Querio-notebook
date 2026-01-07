@@ -69,6 +69,3 @@ class WSMessageBase(BaseModel):
 class WSRunCellMessage(WSMessageBase):
     type: Literal["run_cell"] = "run_cell"
     cellId: str
-
-class WSAuthenticateMessage(WSMessageBase):
-    type: Literal["authenticate"] = "authenticate"

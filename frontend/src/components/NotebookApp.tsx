@@ -33,6 +33,7 @@ export function NotebookApp() {
   const [isRenamingCurrent, setIsRenamingCurrent] = useState(false);
   const [currentNotebookRenameValue, setCurrentNotebookRenameValue] = useState("");
   const [isInitialized, setIsInitialized] = useState(false);
+  const createdCellsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (isInitialized) return;
@@ -101,6 +102,20 @@ export function NotebookApp() {
         break;
       case "cell_created":
         setCells((prev) => {
+          // Use ref inside the updater to prevent duplicate additions
+          // This handles React Strict Mode calling the updater twice
+          if (createdCellsRef.current.has(msg.cell.id)) {
+            return prev;
+          }
+
+          // Also check if cell already exists in state
+          if (prev.some(c => c.id === msg.cell.id)) {
+            createdCellsRef.current.add(msg.cell.id);
+            return prev;
+          }
+
+          createdCellsRef.current.add(msg.cell.id);
+
           const newCells = [...prev];
           // Insert at the specified index, or append if index not provided
           if (typeof msg.index === 'number') {
@@ -158,24 +173,36 @@ export function NotebookApp() {
           )
         );
         break;
+      case "db_connection_updated":
+        if (msg.status === 'error') {
+          console.error("Failed to update DB connection:", msg.error);
+          // Optionally: show toast notification
+        } else {
+          console.log("DB connection updated successfully");
+          // Optionally: show success toast
+        }
+        break;
+      case "kernel_error":
+        console.error("Kernel error:", msg.error);
+        alert(`Kernel crashed: ${msg.error}\n\nPlease refresh the page.`);
+        break;
     }
   }, []); // Empty deps - uses functional setState to avoid needing cells in deps
 
-  // Connect WebSocket - only when we have both notebookId and token
+  // Connect WebSocket
   const { sendMessage } = useNotebookWebSocket(
-    { onMessage: handleWebSocketMessage }
+    { notebookId, onMessage: handleWebSocketMessage }
   );
 
   const addCell = async (type: CellType, afterCellId?: string) => {
     if (!notebookId) return;
 
-    try {
-      const { cell_id } = await api.createCell(notebookId, type, afterCellId);
-      // Cell will be added via WebSocket message
-      setTimeout(() => setFocusedCellId(cell_id), 100);
-    } catch (err) {
-      console.error("Failed to create cell:", err);
-    }
+    // Send cell creation via WebSocket
+    sendMessage({
+      type: 'create_cell',
+      cellType: type,
+      afterCellId: afterCellId
+    });
   };
 
   const deleteCell = async (id: string) => {
@@ -186,26 +213,28 @@ export function NotebookApp() {
       return;
     }
 
-    try {
-      await api.deleteCell(notebookId, id);
-      if (focusedCellId === id) {
-        const index = cells.findIndex((c) => c.id === id);
-        const nextCell = cells[index + 1] || cells[index - 1];
-        setFocusedCellId(nextCell?.id || null);
-      }
-    } catch (err) {
-      console.error("Failed to delete cell:", err);
+    // Send cell deletion via WebSocket
+    sendMessage({
+      type: 'delete_cell',
+      cellId: id
+    });
+
+    if (focusedCellId === id) {
+      const index = cells.findIndex((c) => c.id === id);
+      const nextCell = cells[index + 1] || cells[index - 1];
+      setFocusedCellId(nextCell?.id || null);
     }
   };
 
   const updateCellCode = async (id: string, code: string) => {
     if (!notebookId) return;
-
-    try {
-      await api.updateCell(notebookId, id, code);
-    } catch (err) {
-      console.error("Failed to update cell:", err);
-    }
+    
+    // Send cell update via WebSocket
+    sendMessage({ 
+        type: 'cell_update', 
+        cellId: id, 
+        code: code 
+    });
   };
 
   const runCell = (id: string) => {
@@ -231,12 +260,11 @@ export function NotebookApp() {
 
   const handleDbConnectionUpdate = async () => {
     if (!notebookId) return;
-
-    try {
-      await api.updateDbConnection(notebookId, dbConnection);
-    } catch (err) {
-      console.error("Failed to update DB connection:", err);
-    }
+    
+    sendMessage({ 
+        type: 'update_db_connection', 
+        connectionString: dbConnection 
+    });
   };
 
   const handleCreateNotebook = async () => {
@@ -296,36 +324,35 @@ export function NotebookApp() {
     }
   };
 
-  // potentially do not need
-  // useEffect(() => {
-  //   const handleKeyDown = (e: KeyboardEvent) => {
-  //     // Ignore if the event comes from inside a Monaco editor
-  //     // Monaco editors handle their own keybindings
-  //     const target = e.target as HTMLElement;
-  //     if (target.closest('.monaco-editor')) {
-  //       return;
-  //     }
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if the event comes from inside a Monaco editor
+      // Monaco editors handle their own keybindings
+      const target = e.target as HTMLElement;
+      if (target.closest('.monaco-editor')) {
+        return;
+      }
 
-  //     const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
-  //     const modKey = isMac ? e.metaKey : e.ctrlKey;
+      const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
+      const modKey = isMac ? e.metaKey : e.ctrlKey;
 
-  //     // Cmd/Ctrl + Shift + Up/Down - Navigate cells
-  //     if (modKey && e.shiftKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
-  //       e.preventDefault();
-  //       focusCell(e.key === "ArrowUp" ? "up" : "down");
-  //     }
+      // Cmd/Ctrl + Shift + Up/Down - Navigate cells
+      if (modKey && e.shiftKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+        e.preventDefault();
+        focusCell(e.key === "ArrowUp" ? "up" : "down");
+      }
 
-  //     // Cmd/Ctrl + K - Toggle keyboard shortcuts
-  //     if (modKey && e.key === "k") {
-  //       e.preventDefault();
-  //       setShowKeyboardShortcuts((prev) => !prev);
-  //     }
+      // Cmd/Ctrl + K - Toggle keyboard shortcuts
+      if (modKey && e.key === "k") {
+        e.preventDefault();
+        setShowKeyboardShortcuts((prev) => !prev);
+      }
 
-  //   };
+    };
 
-  //   window.addEventListener("keydown", handleKeyDown);
-  //   return () => window.removeEventListener("keydown", handleKeyDown);
-  // }, [focusedCellId, cells]);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [focusedCellId, cells]);
 
   return (
     <div className="flex h-screen bg-background text-foreground dark">
@@ -479,7 +506,12 @@ export function NotebookApp() {
               value={dbConnection}
               onChange={(e) => setDbConnection(e.target.value)}
               onBlur={handleDbConnectionUpdate}
-              className="hidden xl:block w-64 2xl:w-80"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.currentTarget.blur();
+                }
+              }}
+              className="w-32 sm:w-40 md:w-48 lg:w-56 xl:w-64 2xl:w-80"
             />
           </div>
         </header>

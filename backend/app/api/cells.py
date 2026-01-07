@@ -46,22 +46,6 @@ async def create_cell(notebook_id: str, request: CreateCellRequest):
     NotebookFileStorage.serialize_notebook(notebook)
     return CreateCellResponse(cell_id=cell_id)
 
-@router.put("/{cell_id}")
-async def update_cell(notebook_id: str, cell_id: str, request: UpdateCellRequest):
-    """Update a cell's code."""
-    notebook = NotebookFileStorage.parse_notebook(notebook_id)
-    if not notebook:
-        raise HTTPException(status_code=404, detail="Notebook not found")
-
-    # Find and update cell
-    for cell in notebook.cells:
-        if cell.id == cell_id:
-            cell.code = request.code
-            NotebookFileStorage.serialize_notebook(notebook)
-            return {"status": "ok"}
-
-    raise HTTPException(status_code=404, detail="Cell not found")
-
 @router.delete("/{cell_id}")
 async def delete_cell(notebook_id: str, cell_id: str):
     """Delete a cell."""

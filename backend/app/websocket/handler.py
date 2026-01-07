@@ -16,13 +16,16 @@ class ConnectionManager:
 
         # Create coordinator for this connection
         coordinator = NotebookCoordinator(broadcaster=self)
-        coordinator.load_notebook(notebook_id)
+        await coordinator.load_notebook(notebook_id)
         self.coordinators[connection_id] = coordinator
 
     def disconnect(self, connection_id: str):
         if connection_id in self.active_connections:
             del self.active_connections[connection_id]
         if connection_id in self.coordinators:
+            # Stop kernel process before removing coordinator
+            coordinator = self.coordinators[connection_id]
+            coordinator.shutdown()
             del self.coordinators[connection_id]
 
     async def send_message(self, connection_id: str, message: dict):
@@ -45,15 +48,6 @@ async def handle_websocket(websocket: WebSocket, connection_id: str, notebook_id
     coordinator = manager.coordinators[connection_id]
 
     try:
-        # Wait for authentication
-        auth_message = await websocket.receive_json()
-        if auth_message.get("type") != "authenticate":
-            await websocket.close(code=1008, reason="Authentication required")
-            return
-
-        # Send authentication success
-        await manager.send_message(connection_id, {"type": "authenticated"})
-
         # Message loop
         while True:
             message = await websocket.receive_json()
@@ -70,9 +64,32 @@ async def handle_message(connection_id: str, coordinator: NotebookCoordinator, m
     """Handle incoming WebSocket messages."""
     msg_type = message.get("type")
 
-    if msg_type == "run_cell":
+    if msg_type == "cell_update":
+        cell_id = message.get("cellId")
+        new_code = message.get("code")
+        if cell_id and new_code is not None:
+            await coordinator.handle_cell_update(cell_id, new_code)
+
+    elif msg_type == "update_db_connection":
+        connection_string = message.get("connectionString")
+        if connection_string is not None:
+            await coordinator.handle_db_connection_update(connection_string)
+
+    elif msg_type == "run_cell":
         cell_id = message.get("cellId")
         if cell_id:
             await coordinator.handle_run_cell(cell_id)
+
+    elif msg_type == "create_cell":
+        cell_type = message.get("cellType")
+        after_cell_id = message.get("afterCellId")
+        if cell_type:
+            await coordinator.handle_create_cell(cell_type, after_cell_id)
+
+    elif msg_type == "delete_cell":
+        cell_id = message.get("cellId")
+        if cell_id:
+            await coordinator.handle_delete_cell(cell_id)
+
     else:
         print(f"Unknown message type: {msg_type}")

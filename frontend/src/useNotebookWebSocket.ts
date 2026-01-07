@@ -19,18 +19,36 @@ export type WSMessage =
   | { type: "cell_status"; cellId: string; status: CellStatus }
   | { type: "cell_stdout"; cellId: string; data: string }
   | { type: "cell_error"; cellId: string; error: string }
-  | { type: "cell_output"; cellId: string; output: OutputResponse };
+  | { type: "cell_output"; cellId: string; output: OutputResponse }
+  | {
+      type: "db_connection_updated";
+      connectionString: string;
+      status: "success" | "error";
+      error?: string
+    }
+  | {
+      type: "kernel_error";
+      error: string;
+    };
 
 // Keep existing type guards for compatibility
 export function isWSMessage(msg: unknown): msg is WSMessage {
-  return (
-    typeof msg === "object" &&
-    msg !== null &&
-    "type" in msg &&
-    "cellId" in msg &&
-    typeof (msg as { type: unknown; cellId: unknown }).type === "string" &&
-    typeof (msg as { cellId: unknown }).cellId === "string"
-  );
+  if (typeof msg !== "object" || msg === null || !("type" in msg)) {
+    return false;
+  }
+
+  const msgType = (msg as { type: unknown }).type;
+  if (typeof msgType !== "string") {
+    return false;
+  }
+
+  // db_connection_updated and kernel_error don't have cellId
+  if (msgType === "db_connection_updated" || msgType === "kernel_error") {
+    return true;
+  }
+
+  // All other messages require cellId
+  return "cellId" in msg && typeof (msg as { cellId: unknown }).cellId === "string";
 }
 
 export type ConnectionStatus =
@@ -40,6 +58,7 @@ export type ConnectionStatus =
   | "reconnecting";
 
 interface UseNotebookWebSocketOptions {
+  notebookId: string | null;
   onMessage: (msg: WSMessage) => void;
 }
 
@@ -47,38 +66,27 @@ export function useNotebookWebSocket(
   options: UseNotebookWebSocketOptions
 ) {
   const didUnmount = useRef(false);
-  const isAuthenticated = useRef(false);
   const [connectionStatus, setConnectionStatus] =
     useState<ConnectionStatus>("disconnected");
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
 
-  // Only connect when we have both notebookId and token
-  const socketUrl = `${WS_BASE_URL}/api/v1/ws/notebook`;
+  // Only connect when we have notebookId
+  const socketUrl = options.notebookId
+    ? `${WS_BASE_URL}/api/v1/ws/notebook/${options.notebookId}`
+    : null;
 
   const { sendJsonMessage, readyState } = useWebSocket(
     socketUrl,
     {
-      // Send auth message immediately on open
       onOpen: () => {
-        console.log("WebSocket connected, sending authentication...");
-        isAuthenticated.current = false;
-        setConnectionStatus("connecting");
+        console.log("WebSocket connected");
+        setConnectionStatus("connected");
         setReconnectAttempt(0);
-        sendJsonMessage({ type: "authenticate" });
       },
 
-      // Handle all messages including auth response
       onMessage: (event) => {
         try {
           const data = JSON.parse(event.data);
-
-          // Handle auth response
-          if (data.type === "authenticated") {
-            console.log("WebSocket authenticated successfully");
-            isAuthenticated.current = true;
-            setConnectionStatus("connected");
-            return;
-          }
 
           // Handle errors
           if (data.type === "error") {
@@ -99,10 +107,9 @@ export function useNotebookWebSocket(
 
       onClose: (event) => {
         console.log("WebSocket disconnected", event.code, event.reason);
-        isAuthenticated.current = false;
 
         // Update status based on whether we'll reconnect
-        if (event.code === 1008 || event.code === 1000 || didUnmount.current) {
+        if (event.code === 1000 || didUnmount.current) {
           setConnectionStatus("disconnected");
         } else {
           setConnectionStatus("reconnecting");
@@ -116,8 +123,8 @@ export function useNotebookWebSocket(
 
       // Reconnection with exponential backoff
       shouldReconnect: (closeEvent) => {
-        // Don't reconnect on auth failure (1008) or clean close (1000)
-        if (closeEvent.code === 1008 || closeEvent.code === 1000) {
+        // Don't reconnect on clean close (1000)
+        if (closeEvent.code === 1000) {
           console.log(
             `WebSocket closed with code ${closeEvent.code}, not reconnecting`
           );
@@ -151,7 +158,7 @@ export function useNotebookWebSocket(
   // Send run_cell command
   const runCell = useCallback(
     (cellId: string) => {
-      if (readyState === ReadyState.OPEN && isAuthenticated.current) {
+      if (readyState === ReadyState.OPEN) {
         sendJsonMessage({ type: "run_cell", cellId });
       } else {
         console.warn("WebSocket not ready, cannot run cell:", cellId);
@@ -163,7 +170,7 @@ export function useNotebookWebSocket(
   // Generic send for any message (maintains old interface)
   const sendMessage = useCallback(
     (message: object) => {
-      if (readyState === ReadyState.OPEN && isAuthenticated.current) {
+      if (readyState === ReadyState.OPEN) {
         sendJsonMessage(message);
       } else {
         console.warn("WebSocket not connected, cannot send message:", message);
@@ -175,7 +182,7 @@ export function useNotebookWebSocket(
   return {
     sendMessage,
     runCell,
-    connected: readyState === ReadyState.OPEN && isAuthenticated.current,
+    connected: readyState === ReadyState.OPEN,
     readyState,
     connectionStatus,
     reconnectAttempt,

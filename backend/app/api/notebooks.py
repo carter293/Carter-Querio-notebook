@@ -44,17 +44,6 @@ async def rename_notebook(notebook_id: str, request: RenameNotebookRequest):
     NotebookFileStorage.serialize_notebook(notebook)
     return {"status": "ok"}
 
-@router.put("/{notebook_id}/db")
-async def update_db_connection(notebook_id: str, request: UpdateDbConnectionRequest):
-    """Update database connection string."""
-    notebook = NotebookFileStorage.parse_notebook(notebook_id)
-    if not notebook:
-        raise HTTPException(status_code=404, detail="Notebook not found")
-
-    notebook.db_conn_string = request.connection_string
-    NotebookFileStorage.serialize_notebook(notebook)
-    return {"status": "ok"}
-
 @router.delete("/{notebook_id}")
 async def delete_notebook_endpoint(notebook_id: str):
     """Delete a notebook."""

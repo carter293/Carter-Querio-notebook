@@ -84,9 +84,81 @@ class PythonExecutor:
             )
 
     def _to_output(self, obj: Any) -> Optional[Output]:
-        """Convert Python objects to Output format (stub implementation)."""
-        # For now, just convert to text
-        # Future: Handle pandas DataFrames, matplotlib figures, etc.
+        """
+        Convert Python object to MIME bundle output.
+
+        Supports:
+        - Matplotlib figures → image/png (base64)
+        - Plotly figures → application/vnd.plotly.v1+json
+        - Altair charts → application/vnd.vegalite.v6+json
+        - Pandas DataFrames → application/json (table format)
+        - Generic objects → text/plain (str fallback)
+        """
+
+        # Matplotlib figures
+        try:
+            import matplotlib.pyplot as plt
+            if isinstance(obj, plt.Figure):
+                from io import BytesIO
+                import base64
+
+                buf = BytesIO()
+                obj.savefig(buf, format='png', bbox_inches='tight', dpi=100)
+                buf.seek(0)
+                img_base64 = base64.b64encode(buf.read()).decode('utf-8')
+                plt.close(obj)  # Free memory
+
+                return Output(
+                    mime_type='image/png',
+                    data=img_base64
+                )
+        except ImportError:
+            pass  # matplotlib not installed
+
+        # Plotly figures
+        try:
+            import plotly.graph_objects as go
+            if isinstance(obj, go.Figure):
+                import json
+                spec = json.loads(obj.to_json())
+
+                return Output(
+                    mime_type='application/vnd.plotly.v1+json',
+                    data=spec
+                )
+        except ImportError:
+            pass  # plotly not installed
+
+        # Altair charts
+        try:
+            import altair as alt
+            if isinstance(obj, alt.Chart):
+                vega_json = obj.to_dict()
+
+                return Output(
+                    mime_type='application/vnd.vegalite.v6+json',
+                    data=vega_json
+                )
+        except ImportError:
+            pass  # altair not installed
+
+        # Pandas DataFrames
+        try:
+            import pandas as pd
+            if isinstance(obj, pd.DataFrame):
+                # Convert to table format (matches SQLExecutor output)
+                return Output(
+                    mime_type='application/json',
+                    data={
+                        'type': 'table',
+                        'columns': obj.columns.tolist(),
+                        'rows': obj.values.tolist()
+                    }
+                )
+        except ImportError:
+            pass  # pandas not installed
+
+        # Fallback: convert to plain text
         return Output(
             mime_type='text/plain',
             data=str(obj)
@@ -98,46 +170,167 @@ class PythonExecutor:
 
 
 class SQLExecutor:
-    """Executes SQL queries (stub implementation)."""
+    """Executes SQL queries against PostgreSQL database."""
 
-    def execute(self, sql: str, variables: Dict[str, Any]) -> ExecutionResult:
+    def __init__(self):
+        """Initialize SQL executor with no connection."""
+        self.connection_string: str | None = None
+
+    def set_connection_string(self, conn_str: str) -> None:
         """
-        Execute SQL query with variable substitution.
+        Configure database connection string.
 
-        For now, this is a stub that returns fake data.
-        Future: Connect to actual database.
+        Args:
+            conn_str: PostgreSQL connection string (e.g., "postgresql://localhost/testdb")
         """
-        try:
-            # Substitute {variable} templates
-            substituted_sql = self._substitute_variables(sql, variables)
+        self.connection_string = conn_str
 
-            # Stub: Return fake table data
-            return ExecutionResult(
-                status='success',
-                stdout=f'Executed: {substituted_sql}\n',
-                outputs=[Output(
-                    mime_type='application/json',
-                    data={
-                        'type': 'table',
-                        'columns': ['id', 'name'],
-                        'rows': [[1, 'Alice'], [2, 'Bob']]
-                    }
-                )]
-            )
-        except Exception as e:
-            return ExecutionResult(
-                status='error',
-                error=str(e)
-            )
+    def _prepare_parameterized_query(
+        self, sql: str, variables: Dict[str, Any]
+    ) -> tuple[str, list[str]]:
+        """
+        Convert {variable} templates to $1, $2, ... parameter syntax.
 
-    def _substitute_variables(self, sql: str, variables: Dict[str, Any]) -> str:
-        """Replace {variable} templates with actual values."""
+        Args:
+            sql: SQL query with {variable_name} templates
+            variables: Dictionary mapping variable names to values
+
+        Returns:
+            Tuple of (parameterized_sql, parameter_values as strings)
+
+        Raises:
+            ValueError: If a template variable is not found in variables dict
+
+        Example:
+            sql = "SELECT {user_id} as id, {min_age} as min_age"
+            variables = {'user_id': 42, 'min_age': 18}
+
+            Returns:
+                ("SELECT $1 as id, $2 as min_age", ['42', '18'])
+                
+        Note:
+            All parameters are converted to strings. PostgreSQL will automatically
+            convert them to the appropriate type based on the SQL context (e.g.,
+            in comparisons, function arguments, etc.). This avoids type inference
+            issues with queries like "SELECT $1" where PostgreSQL has no context
+            to determine the parameter type.
+        """
         import re
 
-        def replace_var(match):
+        params: list[str] = []
+        param_counter = 1
+
+        def replace_var(match: re.Match) -> str:
+            nonlocal param_counter
             var_name = match.group(1)
+
             if var_name not in variables:
                 raise ValueError(f"Variable '{var_name}' not found in namespace")
-            return str(variables[var_name])
 
-        return re.sub(r'\{(\w+)\}', replace_var, sql)
+            value = variables[var_name]
+            # Convert to string, handle None as NULL
+            params.append(str(value) if value is not None else None)
+            
+            placeholder = f"${param_counter}"
+            param_counter += 1
+            return placeholder
+
+        safe_sql = re.sub(r'\{(\w+)\}', replace_var, sql)
+        return safe_sql, params
+
+    async def execute(self, sql: str, variables: Dict[str, Any]) -> ExecutionResult:
+        """
+        Execute SQL query with safe parameter binding.
+
+        Args:
+            sql: SQL query with {variable_name} templates
+            variables: Python namespace for variable substitution
+
+        Returns:
+            ExecutionResult with table data or error
+        """
+        import asyncpg
+        from io import StringIO
+
+        stdout_buffer = StringIO()
+
+        # Check connection configured
+        if not self.connection_string:
+            return ExecutionResult(
+                status='error',
+                error='Database connection not configured. Use PUT /notebooks/{id}/db to set connection string.'
+            )
+
+        try:
+            # Convert templates to parameterized query
+            safe_sql, params = self._prepare_parameterized_query(sql, variables)
+
+            # Log the executed query
+            stdout_buffer.write(f"Executing: {safe_sql}\n")
+            stdout_buffer.write(f"Parameters: {params}\n")
+
+            # Connect and execute
+            conn = await asyncpg.connect(self.connection_string)
+            try:
+                # Parameters are already converted to strings in _prepare_parameterized_query
+                records = await conn.fetch(safe_sql, *params)
+
+                if records:
+                    # Convert asyncpg Records to table format
+                    from datetime import datetime, date, time
+
+                    def serialize_value(val):
+                        """Convert non-JSON-serializable types to strings."""
+                        if isinstance(val, (datetime, date, time)):
+                            return val.isoformat()
+                        return val
+
+                    columns = list(records[0].keys())
+                    rows = [[serialize_value(val) for val in record.values()] for record in records]
+
+                    stdout_buffer.write(f"Returned {len(rows)} row(s)\n")
+
+                    return ExecutionResult(
+                        status='success',
+                        stdout=stdout_buffer.getvalue(),
+                        outputs=[
+                            Output(
+                                mime_type='application/json',
+                                data={
+                                    'type': 'table',
+                                    'columns': columns,
+                                    'rows': rows
+                                }
+                            )
+                        ]
+                    )
+                else:
+                    # No results
+                    return ExecutionResult(
+                        status='success',
+                        stdout=stdout_buffer.getvalue() + "Query returned 0 rows\n"
+                    )
+
+            finally:
+                await conn.close()
+
+        except ValueError as e:
+            # Missing variable in template
+            return ExecutionResult(
+                status='error',
+                error=f"Template variable error: {str(e)}"
+            )
+
+        except asyncpg.PostgresError as e:
+            # Database error (syntax, permissions, etc)
+            return ExecutionResult(
+                status='error',
+                error=f"Database error: {str(e)}"
+            )
+
+        except Exception as e:
+            # Unexpected error
+            return ExecutionResult(
+                status='error',
+                error=f"Execution failed: {str(e)}"
+            )
